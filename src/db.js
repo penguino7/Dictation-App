@@ -12,30 +12,32 @@ import {
   getDoc,
 } from "firebase/firestore";
 
-const LESSONS_COL = "lessons";
-const STATS_COL = "settings"; // Tạo thêm folder để lưu Rank
+// Hàm hỗ trợ lấy đường dẫn User
+const getUserLessonRef = (userId) => collection(db, "users", userId, "lessons");
+const getUserStatsRef = (userId) =>
+  doc(db, "users", userId, "stats", "my_stats");
 
-// --- 1. QUẢN LÝ BÀI HỌC ---
+// --- 1. QUẢN LÝ BÀI HỌC (Có userId) ---
 
-export const addDay = async (title, audioUrl, srtContent) => {
+export const addDay = async (userId, title, audioUrl, srtContent) => {
   try {
-    const docRef = await addDoc(collection(db, LESSONS_COL), {
+    // Lưu vào sub-collection của user đó
+    return await addDoc(getUserLessonRef(userId), {
       title,
       audioUrl,
       srtContent,
       createdAt: new Date().toISOString(),
       progress: [],
     });
-    return docRef;
   } catch (e) {
     console.error("Lỗi lưu bài:", e);
-    alert("Lỗi mạng! Không lưu được bài.");
+    alert("Lỗi mạng!");
   }
 };
 
-export const getAllDays = async () => {
+export const getAllDays = async (userId) => {
   try {
-    const q = query(collection(db, LESSONS_COL), orderBy("createdAt", "desc"));
+    const q = query(getUserLessonRef(userId), orderBy("createdAt", "desc"));
     const querySnapshot = await getDocs(q);
     const days = [];
     querySnapshot.forEach((doc) => {
@@ -48,33 +50,25 @@ export const getAllDays = async () => {
   }
 };
 
-export const deleteDay = async (id) => {
-  await deleteDoc(doc(db, LESSONS_COL, id));
+export const deleteDay = async (userId, id) => {
+  // Xóa đúng bài trong folder của user đó
+  await deleteDoc(doc(db, "users", userId, "lessons", id));
 };
 
-export const updateDayProgress = async (id, completedLines) => {
+export const updateDayProgress = async (userId, id, completedLines) => {
   if (!id) return;
-  const lessonRef = doc(db, LESSONS_COL, id);
+  const lessonRef = doc(db, "users", userId, "lessons", id);
   await updateDoc(lessonRef, { progress: completedLines });
 };
 
-// --- 2. QUẢN LÝ RANK & STREAK (Lưu lên mây luôn) ---
+// --- 2. QUẢN LÝ RANK & STREAK (Riêng từng người) ---
 
-export const saveUserStats = async (xp, streak) => {
-  // Lưu vào một file cố định tên là 'my_stats'
-  await setDoc(
-    doc(db, STATS_COL, "my_stats"),
-    {
-      xp,
-      streak,
-    },
-    { merge: true }
-  );
+export const saveUserStats = async (userId, xp, streak) => {
+  await setDoc(getUserStatsRef(userId), { xp, streak }, { merge: true });
 };
 
-export const getUserStats = async () => {
-  const docRef = doc(db, STATS_COL, "my_stats");
-  const docSnap = await getDoc(docRef);
+export const getUserStats = async (userId) => {
+  const docSnap = await getDoc(getUserStatsRef(userId));
   if (docSnap.exists()) {
     return docSnap.data();
   } else {

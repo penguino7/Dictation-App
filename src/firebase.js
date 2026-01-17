@@ -1,5 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
+import { getAuth } from "firebase/auth"; // Thêm dòng này
 
 // Cậu vào lại console.firebase.google.com để lấy cái config dán vào đây nhé
 // (Cái đoạn apiKey, authDomain... hôm qua cậu lấy ấy)
@@ -17,3 +18,4 @@ const app = initializeApp(firebaseConfig);
 
 // Chỉ lấy Database (Firestore) để lưu trữ
 export const db = getFirestore(app);
+export const auth = getAuth(app); // Xuất thêm auth
