@@ -2,11 +2,12 @@ import { useState, useEffect } from "react";
 import { BookOpen, Menu } from "lucide-react";
 import { auth } from "./firebase";
 import { onAuthStateChanged } from "firebase/auth";
+// Import các hàm mới
 import {
-  addDay,
-  getAllDays,
-  deleteDay,
-  updateDayProgress,
+  addGlobalLesson,
+  getGlobalLessonsWithProgress,
+  deleteGlobalLesson,
+  updateUserProgress,
   getUserStats,
   updateUserStats,
 } from "./db";
@@ -16,23 +17,25 @@ import CreateModal from "./components/CreateModal";
 import Player from "./components/Player";
 import Auth from "./components/Auth";
 
+// ⚠️ THAY EMAIL CỦA CẬU VÀO ĐÂY NHÉ
+const ADMIN_EMAIL = "ngocnhat@gmail.com";
+
 function App() {
   const [user, setUser] = useState(null);
   const [loadingUser, setLoadingUser] = useState(true);
-
   const [days, setDays] = useState([]);
   const [selectedDay, setSelectedDay] = useState(null);
   const [isCreating, setIsCreating] = useState(false);
-
-  // State quản lý chỉ số User
   const [stats, setStats] = useState({
     xp: 0,
     streak: 0,
     totalMinutes: 0,
     todayMinutes: 0,
   });
-
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  // Biến kiểm tra xem có phải Admin không
+  const isAdmin = user?.email === ADMIN_EMAIL;
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -53,36 +56,44 @@ function App() {
 
   const loadData = async () => {
     if (!user) return;
-    const lessonData = await getAllDays(user.uid);
+    // Dùng hàm mới: Lấy bài chung + tiến độ riêng
+    const lessonData = await getGlobalLessonsWithProgress(user.uid);
     setDays(lessonData);
+
     const userStats = await getUserStats(user.uid);
     setStats(userStats);
   };
 
   const handleSaveDay = async (title, audioUrl, srtContent) => {
-    await addDay(user.uid, title, audioUrl, srtContent);
+    // Chỉ Admin mới được lưu
+    if (!isAdmin) return alert("Bạn không có quyền thêm bài!");
+
+    await addGlobalLesson(title, audioUrl, srtContent);
     await loadData();
-    alert("Thêm bài thành công!");
+    alert("Đã đăng bài lên kho chung!");
   };
 
   const handleDeleteDay = async (e, id) => {
     e.stopPropagation();
-    if (confirm("Xóa bài này nhé?")) {
-      await deleteDay(user.uid, id);
+    // Chỉ Admin mới được xóa
+    if (!isAdmin) return alert("Chỉ Admin mới được xóa bài!");
+
+    if (confirm("Xóa bài này khỏi hệ thống chung?")) {
+      await deleteGlobalLesson(id);
       if (selectedDay && selectedDay.id === id) setSelectedDay(null);
       await loadData();
     }
   };
 
-  // Hàm cập nhật Stats (XP, Streak, Time)
   const handleUpdateStats = async (changes) => {
-    // changes = { addXP: 10, newStreak: 5, addMinutes: 1 }
     const newStats = await updateUserStats(user.uid, changes);
-    setStats(newStats); // Cập nhật ngay lên giao diện
+    setStats(newStats);
   };
 
+  // Hàm cập nhật tiến độ (Sửa lại để gọi hàm mới)
   const handleUpdateProgress = async (dayId, completedLines) => {
-    await updateDayProgress(user.uid, dayId, completedLines);
+    await updateUserProgress(user.uid, dayId, completedLines);
+
     setDays((prev) =>
       prev.map((d) =>
         d.id === dayId ? { ...d, progress: completedLines } : d,
@@ -104,8 +115,8 @@ function App() {
   return (
     <div className="flex h-screen bg-[#0f1115] font-sans text-gray-200 overflow-hidden">
       <Sidebar
-        user={user} // Truyền info user vào
-        stats={stats} // Truyền stats (time, xp) vào
+        user={user}
+        stats={stats}
         days={days}
         selectedDay={selectedDay}
         onSelectDay={setSelectedDay}
@@ -113,6 +124,7 @@ function App() {
         onOpenCreate={() => setIsCreating(true)}
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
+        isAdmin={isAdmin} // Truyền quyền Admin xuống Sidebar
       />
 
       <div className="flex-1 flex flex-col relative bg-[#13161c]">
@@ -133,21 +145,28 @@ function App() {
             key={selectedDay.id}
             day={selectedDay}
             initialStreak={stats.streak}
-            onUpdateStats={handleUpdateStats} // Truyền hàm xử lý mới
+            onUpdateStats={handleUpdateStats}
             onUpdateProgress={handleUpdateProgress}
           />
         ) : (
           <div className="h-full flex flex-col items-center justify-center text-gray-500 p-4 text-center">
             <BookOpen className="w-16 h-16 mb-4 opacity-20" />
-            <p className="text-lg font-medium">Chọn bài học để cày nào!</p>
+            <p className="text-lg font-medium">
+              {isAdmin
+                ? "Chào Thầy Giáo! Hãy thêm bài học cho mọi người."
+                : "Chào bạn! Chọn bài để học nhé."}
+            </p>
           </div>
         )}
 
-        <CreateModal
-          isOpen={isCreating}
-          onClose={() => setIsCreating(false)}
-          onSaveSuccess={handleSaveDay}
-        />
+        {/* Chỉ hiện Modal thêm bài nếu là Admin */}
+        {isAdmin && (
+          <CreateModal
+            isOpen={isCreating}
+            onClose={() => setIsCreating(false)}
+            onSaveSuccess={handleSaveDay}
+          />
+        )}
       </div>
     </div>
   );

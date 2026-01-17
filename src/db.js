@@ -5,58 +5,81 @@ import {
   getDocs,
   doc,
   deleteDoc,
-  updateDoc,
-  query,
-  orderBy,
   setDoc,
   getDoc,
+  query,
+  orderBy,
 } from "firebase/firestore";
 
-// Hàm hỗ trợ lấy đường dẫn
-const getUserLessonRef = (userId) => collection(db, "users", userId, "lessons");
-const getUserStatsRef = (userId) =>
-  doc(db, "users", userId, "stats", "my_stats");
+// --- 1. QUẢN LÝ BÀI HỌC (KHO CHUNG) ---
 
-// --- 1. QUẢN LÝ BÀI HỌC ---
-export const addDay = async (userId, title, audioUrl, srtContent) => {
+// Chỉ Admin mới gọi hàm này
+export const addGlobalLesson = async (title, audioUrl, srtContent) => {
   try {
-    return await addDoc(getUserLessonRef(userId), {
+    // Lưu vào collection "lessons" ở root (ngoài cùng)
+    return await addDoc(collection(db, "lessons"), {
       title,
       audioUrl,
       srtContent,
       createdAt: new Date().toISOString(),
-      progress: [],
     });
   } catch (e) {
-    console.error(e);
-    alert("Lỗi mạng!");
+    console.error("Lỗi thêm bài:", e);
+    alert("Lỗi khi lưu bài học!");
   }
 };
 
-export const getAllDays = async (userId) => {
+export const deleteGlobalLesson = async (id) => {
+  await deleteDoc(doc(db, "lessons", id));
+};
+
+// Hàm này tải bài học chung + ghép với tiến độ riêng của user
+export const getGlobalLessonsWithProgress = async (userId) => {
   try {
-    const q = query(getUserLessonRef(userId), orderBy("createdAt", "desc"));
-    const querySnapshot = await getDocs(q);
-    const days = [];
-    querySnapshot.forEach((doc) => days.push({ id: doc.id, ...doc.data() }));
-    return days;
+    // 1. Tải danh sách bài học chung
+    const q = query(collection(db, "lessons"), orderBy("createdAt", "desc"));
+    const lessonSnap = await getDocs(q);
+    const lessons = [];
+
+    // 2. Tải tiến độ riêng của user
+    const progressRef = collection(db, "users", userId, "progress");
+    const progressSnap = await getDocs(progressRef);
+    const userProgress = {}; // Tạo map: { lessonId: [1, 2, 3] }
+
+    progressSnap.forEach((doc) => {
+      userProgress[doc.id] = doc.data().completedLines || [];
+    });
+
+    // 3. Ghép lại
+    lessonSnap.forEach((doc) => {
+      const lessonId = doc.id;
+      lessons.push({
+        id: lessonId,
+        ...doc.data(),
+        // Nếu user có tiến độ bài này thì lấy, ko thì rỗng
+        progress: userProgress[lessonId] || [],
+      });
+    });
+
+    return lessons;
   } catch (e) {
+    console.error("Lỗi tải bài:", e);
     return [];
   }
 };
 
-export const deleteDay = async (userId, id) => {
-  await deleteDoc(doc(db, "users", userId, "lessons", id));
+// --- 2. QUẢN LÝ TIẾN ĐỘ RIÊNG ---
+
+export const updateUserProgress = async (userId, lessonId, completedLines) => {
+  if (!lessonId) return;
+  // Lưu vào users/{userId}/progress/{lessonId}
+  const progressRef = doc(db, "users", userId, "progress", lessonId);
+  await setDoc(progressRef, { completedLines }, { merge: true });
 };
 
-export const updateDayProgress = async (userId, id, completedLines) => {
-  if (!id) return;
-  await updateDoc(doc(db, "users", userId, "lessons", id), {
-    progress: completedLines,
-  });
-};
-
-// --- 2. QUẢN LÝ STATS (Rank, Streak, TIME) ---
+// --- 3. GIỮ NGUYÊN PHẦN STATS (RANK, TIME) ---
+const getUserStatsRef = (userId) =>
+  doc(db, "users", userId, "stats", "my_stats");
 
 export const updateUserStats = async (
   userId,
@@ -64,21 +87,16 @@ export const updateUserStats = async (
 ) => {
   const statsRef = getUserStatsRef(userId);
   const snap = await getDoc(statsRef);
-
-  // Lấy dữ liệu cũ hoặc tạo mới nếu chưa có
   let stats = snap.exists()
     ? snap.data()
     : { xp: 0, streak: 0, totalMinutes: 0, todayMinutes: 0, lastDate: "" };
 
-  const todayStr = new Date().toDateString(); // Ví dụ: "Sat Jan 17 2026"
-
-  // Kiểm tra ngày mới để reset phút hôm nay
+  const todayStr = new Date().toDateString();
   if (stats.lastDate !== todayStr) {
     stats.todayMinutes = 0;
     stats.lastDate = todayStr;
   }
 
-  // Cộng dồn dữ liệu
   if (addXP) stats.xp = (stats.xp || 0) + addXP;
   if (newStreak !== undefined) stats.streak = newStreak;
   if (addMinutes) {
@@ -87,18 +105,15 @@ export const updateUserStats = async (
   }
 
   await setDoc(statsRef, stats, { merge: true });
-  return stats; // Trả về stats mới nhất để App cập nhật giao diện
+  return stats;
 };
 
 export const getUserStats = async (userId) => {
   const snap = await getDoc(getUserStatsRef(userId));
   if (snap.exists()) {
     let stats = snap.data();
-    // Nếu load lên mà thấy sang ngày mới rồi thì reset hiển thị luôn
     const todayStr = new Date().toDateString();
-    if (stats.lastDate !== todayStr) {
-      stats.todayMinutes = 0;
-    }
+    if (stats.lastDate !== todayStr) stats.todayMinutes = 0;
     return stats;
   }
   return { xp: 0, streak: 0, totalMinutes: 0, todayMinutes: 0 };

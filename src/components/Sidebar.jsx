@@ -5,13 +5,13 @@ import {
   Trash2,
   Calendar,
   LogOut,
-  User,
   Clock,
   Sun,
 } from "lucide-react";
 import { auth } from "../firebase";
 import { signOut } from "firebase/auth";
 
+// Nhận thêm prop isAdmin
 export default function Sidebar({
   user,
   stats,
@@ -22,12 +22,12 @@ export default function Sidebar({
   onOpenCreate,
   isOpen,
   onClose,
+  isAdmin,
 }) {
   const handleLogout = () => {
     if (confirm("Bạn muốn đăng xuất?")) signOut(auth);
   };
 
-  // Format phút thành Giờ:Phút (ví dụ: 125p -> 2h 5m)
   const formatTime = (minutes) => {
     if (!minutes) return "0p";
     const h = Math.floor(minutes / 60);
@@ -51,15 +51,21 @@ export default function Sidebar({
           ${isOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0 lg:static lg:shadow-none
       `}
       >
-        {/* 1. GÓC THÔNG TIN USER (Mới thêm) */}
+        {/* INFO USER */}
         <div className="p-6 bg-[#1e222b] border-b border-gray-800">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-black text-xl shadow-lg">
               {user?.email?.charAt(0).toUpperCase() || "U"}
             </div>
             <div className="overflow-hidden">
-              <h2 className="font-bold text-white truncate text-sm">
+              <h2 className="font-bold text-white truncate text-sm flex items-center gap-1">
                 {user?.email?.split("@")[0]}
+                {/* Nếu là Admin thì hiện chữ ADMIN */}
+                {isAdmin && (
+                  <span className="bg-red-500 text-[8px] px-1 rounded text-white">
+                    ADMIN
+                  </span>
+                )}
               </h2>
               <p className="text-[10px] text-gray-500 truncate">
                 {user?.email}
@@ -73,11 +79,10 @@ export default function Sidebar({
             </button>
           </div>
 
-          {/* Thống kê thời gian */}
           <div className="grid grid-cols-2 gap-2">
             <div className="bg-[#15171c] p-2 rounded-lg border border-gray-700/50 flex flex-col items-center">
               <span className="text-[10px] text-gray-500 font-bold uppercase flex items-center gap-1 mb-1">
-                <Clock className="w-3 h-3" /> Tổng cộng
+                <Clock className="w-3 h-3" /> Tổng
               </span>
               <span className="text-sm font-black text-blue-400">
                 {formatTime(stats.totalMinutes)}
@@ -94,7 +99,7 @@ export default function Sidebar({
           </div>
         </div>
 
-        {/* 2. RANK CARD */}
+        {/* RANK */}
         <div className="p-6 pb-2">
           <div className="bg-gradient-to-br from-orange-600 to-red-600 rounded-2xl p-4 text-white shadow-lg relative overflow-hidden group">
             <Trophy className="absolute -bottom-2 -right-2 w-20 h-20 text-white/10 rotate-12" />
@@ -116,26 +121,29 @@ export default function Sidebar({
           </div>
         </div>
 
-        <div className="px-6 pb-4">
-          <button
-            onClick={() => {
-              onOpenCreate();
-              onClose();
-            }}
-            className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-900/20 active:scale-95 transition-all"
-          >
-            <Plus className="w-4 h-4" /> Thêm bài mới
-          </button>
-        </div>
+        {/* NÚT THÊM BÀI (Chỉ hiện cho Admin) */}
+        {isAdmin && (
+          <div className="px-6 pb-4">
+            <button
+              onClick={() => {
+                onOpenCreate();
+                onClose();
+              }}
+              className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-900/20 active:scale-95 transition-all"
+            >
+              <Plus className="w-4 h-4" /> Thêm bài cho mọi người
+            </button>
+          </div>
+        )}
 
-        {/* 3. DANH SÁCH BÀI HỌC */}
+        {/* LIST BÀI */}
         <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-1 custom-scrollbar">
           <p className="text-[10px] font-bold text-gray-500 uppercase px-2 mb-2 tracking-wider">
-            Thư viện bài học
+            {days.length} bài học có sẵn
           </p>
           {days.length === 0 ? (
             <div className="text-center text-gray-600 py-8 text-xs italic">
-              Trống trơn...
+              Chưa có bài nào...
             </div>
           ) : (
             days.map((day) => (
@@ -158,14 +166,24 @@ export default function Sidebar({
                     <span>
                       {new Date(day.createdAt).toLocaleDateString("vi-VN")}
                     </span>
+                    {/* Hiển thị tiến độ % */}
+                    {day.progress && day.progress.length > 0 && (
+                      <span className="text-green-500 ml-2 font-bold">
+                        • {Math.round((day.progress.length / 50) * 100)}%
+                      </span>
+                    )}
                   </div>
                 </div>
-                <button
-                  onClick={(e) => onDeleteDay(e, day.id)}
-                  className="opacity-0 group-hover:opacity-100 p-1.5 text-gray-500 hover:text-red-500 transition-all"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+
+                {/* Chỉ Admin mới thấy nút Xóa */}
+                {isAdmin && (
+                  <button
+                    onClick={(e) => onDeleteDay(e, day.id)}
+                    className="opacity-0 group-hover:opacity-100 p-1.5 text-gray-500 hover:text-red-500 transition-all"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
               </div>
             ))
           )}
