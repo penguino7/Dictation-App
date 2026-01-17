@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { BookOpen, Menu } from "lucide-react"; // Thêm icon Menu
+import { BookOpen, Menu } from "lucide-react";
 import { auth } from "./firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import {
@@ -8,7 +8,7 @@ import {
   deleteDay,
   updateDayProgress,
   getUserStats,
-  saveUserStats,
+  updateUserStats,
 } from "./db";
 
 import Sidebar from "./components/Sidebar";
@@ -23,10 +23,15 @@ function App() {
   const [days, setDays] = useState([]);
   const [selectedDay, setSelectedDay] = useState(null);
   const [isCreating, setIsCreating] = useState(false);
-  const [currentXP, setCurrentXP] = useState(0);
-  const [streak, setStreak] = useState(0);
 
-  // State mới: Quản lý đóng mở Sidebar trên Mobile
+  // State quản lý chỉ số User
+  const [stats, setStats] = useState({
+    xp: 0,
+    streak: 0,
+    totalMinutes: 0,
+    todayMinutes: 0,
+  });
+
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   useEffect(() => {
@@ -38,12 +43,10 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (user) {
-      loadData();
-    } else {
+    if (user) loadData();
+    else {
       setDays([]);
-      setCurrentXP(0);
-      setStreak(0);
+      setStats({ xp: 0, streak: 0, totalMinutes: 0, todayMinutes: 0 });
       setSelectedDay(null);
     }
   }, [user]);
@@ -52,9 +55,8 @@ function App() {
     if (!user) return;
     const lessonData = await getAllDays(user.uid);
     setDays(lessonData);
-    const stats = await getUserStats(user.uid);
-    setCurrentXP(stats.xp || 0);
-    setStreak(stats.streak || 0);
+    const userStats = await getUserStats(user.uid);
+    setStats(userStats);
   };
 
   const handleSaveDay = async (title, audioUrl, srtContent) => {
@@ -72,15 +74,11 @@ function App() {
     }
   };
 
-  const handleUpdateStats = (addedXP, newStreak) => {
-    const newXP = currentXP + addedXP;
-    setCurrentXP(newXP);
-    let finalStreak = streak;
-    if (newStreak !== undefined) {
-      setStreak(newStreak);
-      finalStreak = newStreak;
-    }
-    saveUserStats(user.uid, newXP, finalStreak);
+  // Hàm cập nhật Stats (XP, Streak, Time)
+  const handleUpdateStats = async (changes) => {
+    // changes = { addXP: 10, newStreak: 5, addMinutes: 1 }
+    const newStats = await updateUserStats(user.uid, changes);
+    setStats(newStats); // Cập nhật ngay lên giao diện
   };
 
   const handleUpdateProgress = async (dayId, completedLines) => {
@@ -105,20 +103,19 @@ function App() {
 
   return (
     <div className="flex h-screen bg-[#0f1115] font-sans text-gray-200 overflow-hidden">
-      {/* Sidebar truyền thêm props isOpen và onClose */}
       <Sidebar
+        user={user} // Truyền info user vào
+        stats={stats} // Truyền stats (time, xp) vào
         days={days}
         selectedDay={selectedDay}
         onSelectDay={setSelectedDay}
         onDeleteDay={handleDeleteDay}
         onOpenCreate={() => setIsCreating(true)}
-        currentXP={currentXP}
-        isOpen={isSidebarOpen} // Truyền trạng thái mở
-        onClose={() => setIsSidebarOpen(false)} // Hàm đóng
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
       />
 
       <div className="flex-1 flex flex-col relative bg-[#13161c]">
-        {/* HEADER MOBILE: Chỉ hiện trên màn hình nhỏ (lg:hidden) */}
         <div className="lg:hidden flex items-center p-4 bg-[#1a1d24] border-b border-gray-800">
           <button
             onClick={() => setIsSidebarOpen(true)}
@@ -135,16 +132,14 @@ function App() {
           <Player
             key={selectedDay.id}
             day={selectedDay}
-            initialStreak={streak}
-            onUpdateStats={handleUpdateStats}
+            initialStreak={stats.streak}
+            onUpdateStats={handleUpdateStats} // Truyền hàm xử lý mới
             onUpdateProgress={handleUpdateProgress}
           />
         ) : (
           <div className="h-full flex flex-col items-center justify-center text-gray-500 p-4 text-center">
             <BookOpen className="w-16 h-16 mb-4 opacity-20" />
-            <p className="text-lg font-medium">
-              Chọn bài học từ Menu để bắt đầu
-            </p>
+            <p className="text-lg font-medium">Chọn bài học để cày nào!</p>
           </div>
         )}
 

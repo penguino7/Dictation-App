@@ -12,16 +12,14 @@ import {
   getDoc,
 } from "firebase/firestore";
 
-// Hàm hỗ trợ lấy đường dẫn User
+// Hàm hỗ trợ lấy đường dẫn
 const getUserLessonRef = (userId) => collection(db, "users", userId, "lessons");
 const getUserStatsRef = (userId) =>
   doc(db, "users", userId, "stats", "my_stats");
 
-// --- 1. QUẢN LÝ BÀI HỌC (Có userId) ---
-
+// --- 1. QUẢN LÝ BÀI HỌC ---
 export const addDay = async (userId, title, audioUrl, srtContent) => {
   try {
-    // Lưu vào sub-collection của user đó
     return await addDoc(getUserLessonRef(userId), {
       title,
       audioUrl,
@@ -30,7 +28,7 @@ export const addDay = async (userId, title, audioUrl, srtContent) => {
       progress: [],
     });
   } catch (e) {
-    console.error("Lỗi lưu bài:", e);
+    console.error(e);
     alert("Lỗi mạng!");
   }
 };
@@ -40,38 +38,68 @@ export const getAllDays = async (userId) => {
     const q = query(getUserLessonRef(userId), orderBy("createdAt", "desc"));
     const querySnapshot = await getDocs(q);
     const days = [];
-    querySnapshot.forEach((doc) => {
-      days.push({ id: doc.id, ...doc.data() });
-    });
+    querySnapshot.forEach((doc) => days.push({ id: doc.id, ...doc.data() }));
     return days;
   } catch (e) {
-    console.error("Lỗi tải bài:", e);
     return [];
   }
 };
 
 export const deleteDay = async (userId, id) => {
-  // Xóa đúng bài trong folder của user đó
   await deleteDoc(doc(db, "users", userId, "lessons", id));
 };
 
 export const updateDayProgress = async (userId, id, completedLines) => {
   if (!id) return;
-  const lessonRef = doc(db, "users", userId, "lessons", id);
-  await updateDoc(lessonRef, { progress: completedLines });
+  await updateDoc(doc(db, "users", userId, "lessons", id), {
+    progress: completedLines,
+  });
 };
 
-// --- 2. QUẢN LÝ RANK & STREAK (Riêng từng người) ---
+// --- 2. QUẢN LÝ STATS (Rank, Streak, TIME) ---
 
-export const saveUserStats = async (userId, xp, streak) => {
-  await setDoc(getUserStatsRef(userId), { xp, streak }, { merge: true });
+export const updateUserStats = async (
+  userId,
+  { addXP, newStreak, addMinutes },
+) => {
+  const statsRef = getUserStatsRef(userId);
+  const snap = await getDoc(statsRef);
+
+  // Lấy dữ liệu cũ hoặc tạo mới nếu chưa có
+  let stats = snap.exists()
+    ? snap.data()
+    : { xp: 0, streak: 0, totalMinutes: 0, todayMinutes: 0, lastDate: "" };
+
+  const todayStr = new Date().toDateString(); // Ví dụ: "Sat Jan 17 2026"
+
+  // Kiểm tra ngày mới để reset phút hôm nay
+  if (stats.lastDate !== todayStr) {
+    stats.todayMinutes = 0;
+    stats.lastDate = todayStr;
+  }
+
+  // Cộng dồn dữ liệu
+  if (addXP) stats.xp = (stats.xp || 0) + addXP;
+  if (newStreak !== undefined) stats.streak = newStreak;
+  if (addMinutes) {
+    stats.totalMinutes = (stats.totalMinutes || 0) + addMinutes;
+    stats.todayMinutes = (stats.todayMinutes || 0) + addMinutes;
+  }
+
+  await setDoc(statsRef, stats, { merge: true });
+  return stats; // Trả về stats mới nhất để App cập nhật giao diện
 };
 
 export const getUserStats = async (userId) => {
-  const docSnap = await getDoc(getUserStatsRef(userId));
-  if (docSnap.exists()) {
-    return docSnap.data();
-  } else {
-    return { xp: 0, streak: 0 };
+  const snap = await getDoc(getUserStatsRef(userId));
+  if (snap.exists()) {
+    let stats = snap.data();
+    // Nếu load lên mà thấy sang ngày mới rồi thì reset hiển thị luôn
+    const todayStr = new Date().toDateString();
+    if (stats.lastDate !== todayStr) {
+      stats.todayMinutes = 0;
+    }
+    return stats;
   }
+  return { xp: 0, streak: 0, totalMinutes: 0, todayMinutes: 0 };
 };
