@@ -448,6 +448,7 @@ export default function Player({
           </div>
         </div>
       </div>
+      <h1>Deploy thành công 🎉</h1>
     </div>
   );
 }
