@@ -31,7 +31,7 @@ export default function Player({
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [checkResultData, setCheckResultData] = useState(null);
 
-  const [completedLines, setCompletedLines] = useState(day.progress || []);
+  const [completedLines, setCompletedLines] = useState(day?.progress || []);
   const [xpNotification, setXpNotification] = useState(null);
   const [streak, setStreak] = useState(initialStreak);
 
@@ -41,7 +41,17 @@ export default function Player({
   const isFirstLoad = useRef(true);
   const parser = new Parser();
 
-  // 1. INIT DATA
+  // --- TÍNH NĂNG MỚI: ĐẾM GIỜ HỌC ---
+  useEffect(() => {
+    // Cứ mỗi 60 giây (60000ms) thì gọi hàm cập nhật +1 phút
+    const timer = setInterval(() => {
+      onUpdateStats({ addMinutes: 1 }); // Chỉ gửi addMinutes, không gửi XP hay Streak
+    }, 60000);
+
+    return () => clearInterval(timer); // Xóa timer khi user thoát bài hoặc tắt web
+  }, []);
+  // ---------------------------------
+
   useEffect(() => {
     if (day) {
       const srtData = parser.fromSrt(day.srtContent);
@@ -65,7 +75,6 @@ export default function Player({
     }
   }, [day]);
 
-  // 2. AUDIO LOGIC
   useEffect(() => {
     setUserInput("");
     setCheckResultData(null);
@@ -73,9 +82,8 @@ export default function Player({
 
     if (subtitles.length > 0 && audioRef.current) {
       audioRef.current.currentTime = subtitles[currentLineIndex].startTime;
-      if (isFirstLoad.current) {
-        isFirstLoad.current = false;
-      } else {
+      if (isFirstLoad.current) isFirstLoad.current = false;
+      else {
         audioRef.current.play().catch(() => {});
         setIsPlaying(true);
       }
@@ -84,21 +92,17 @@ export default function Player({
         const activeItem = scrollRef.current.querySelector(
           `[data-index='${currentLineIndex}']`,
         );
-        if (activeItem) {
+        if (activeItem)
           activeItem.scrollIntoView({ behavior: "smooth", block: "center" });
-        }
       }
     }
   }, [currentLineIndex, subtitles]);
 
-  // 3. HANDLERS
   const handleNext = () => {
     setCheckResultData(null);
-    if (currentLineIndex < subtitles.length - 1) {
+    if (currentLineIndex < subtitles.length - 1)
       setCurrentLineIndex((curr) => curr + 1);
-    } else {
-      alert("Chúc mừng! Bạn đã hoàn thành bài học.");
-    }
+    else alert("Chúc mừng! Bạn đã hoàn thành bài học.");
   };
 
   const checkResult = () => {
@@ -138,13 +142,14 @@ export default function Player({
           multiplier: streakMultiplier,
         });
 
-        onUpdateStats(earnedXP, newStreak);
+        // Cập nhật XP, Streak (không cập nhật time ở đây)
+        onUpdateStats({ addXP: earnedXP, newStreak: newStreak });
         onUpdateProgress(day.id, newCompletedLines);
         setTimeout(() => setXpNotification(null), 2500);
       } else {
         if (streak > 0) {
           setStreak(0);
-          onUpdateStats(0, 0);
+          onUpdateStats({ newStreak: 0 });
         }
       }
     }
@@ -182,7 +187,6 @@ export default function Player({
 
   return (
     <div className="h-full flex flex-col p-3 lg:p-6 bg-[#0f1115] text-white relative overflow-hidden">
-      {/* 1. HIỆU ỨNG XP */}
       {xpNotification && (
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 animate-bounce-up pointer-events-none flex flex-col items-center">
           <div
@@ -193,7 +197,6 @@ export default function Player({
         </div>
       )}
 
-      {/* 2. HEADER */}
       <div className="flex-none mb-4 lg:mb-6 flex items-end justify-between border-b border-gray-800 pb-3">
         <div>
           <p className="text-[10px] font-bold text-blue-400 uppercase tracking-widest mb-1">
@@ -218,9 +221,7 @@ export default function Player({
         </div>
       </div>
 
-      {/* 3. MAIN GRID */}
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 min-h-0">
-        {/* CỘT TRÁI: TIẾN ĐỘ (Ẩn trên mobile) */}
         <div className="hidden lg:flex lg:col-span-4 flex-col bg-[#1a1d24] rounded-2xl border border-gray-800 overflow-hidden h-full shadow-lg">
           <div className="flex-none p-4 bg-[#1e222b] border-b border-gray-800 flex justify-between items-center">
             <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
@@ -275,7 +276,6 @@ export default function Player({
           </div>
         </div>
 
-        {/* CỘT PHẢI: PLAYER & INPUT (Responsive xịn) */}
         <div className="lg:col-span-8 flex flex-col gap-3 lg:gap-4 h-full min-h-0">
           <audio
             ref={audioRef}
@@ -284,7 +284,6 @@ export default function Player({
             playbackRate={playbackSpeed}
           />
 
-          {/* Thanh điều khiển (Control Bar) */}
           <div className="flex-none bg-[#1a1d24] rounded-2xl p-3 lg:p-4 border border-gray-800 flex justify-between items-center shadow-lg">
             <div className="flex items-center gap-2">
               <Settings className="w-4 h-4 text-gray-500 hidden sm:block" />
@@ -337,7 +336,6 @@ export default function Player({
               </button>
             </div>
 
-            {/* Ẩn thời gian trên mobile cho đỡ chật */}
             <div className="w-10 sm:w-20 text-right text-xs font-mono text-gray-500 hidden sm:block">
               {subtitles[currentLineIndex] && (
                 <span>
@@ -351,9 +349,7 @@ export default function Player({
             </div>
           </div>
 
-          {/* KHU VỰC NHẬP LIỆU (Đã sửa nút bấm) */}
           <div className="flex-1 bg-[#1a1d24] rounded-2xl border border-gray-800 overflow-hidden relative flex flex-col shadow-lg min-h-0">
-            {/* Header Input */}
             <div className="flex-none px-4 py-3 border-b border-gray-800 flex items-center gap-2 bg-[#1e222b]">
               <Type className="w-4 h-4 text-blue-500" />
               <span className="text-[10px] font-bold text-gray-400 uppercase">
@@ -361,7 +357,6 @@ export default function Player({
               </span>
             </div>
 
-            {/* Input Box - Tự giãn nở */}
             <textarea
               ref={inputRef}
               className={`w-full flex-1 p-4 lg:p-6 text-lg lg:text-2xl bg-transparent outline-none resize-none font-medium leading-relaxed
@@ -374,7 +369,6 @@ export default function Player({
               spellCheck="false"
             ></textarea>
 
-            {/* Overlay Kết quả */}
             {checkResultData && (
               <div className="absolute inset-0 bg-[#1a1d24]/95 backdrop-blur-sm z-10 flex flex-col animate-fade-in">
                 <div className="flex-none px-4 py-3 border-b border-gray-800 flex justify-between items-center bg-green-900/20">
@@ -407,7 +401,6 @@ export default function Player({
               </div>
             )}
 
-            {/* FOOTER CHỨA NÚT BẤM (QUAN TRỌNG: Không dùng absolute nữa) */}
             <div className="flex-none p-4 border-t border-gray-800 bg-[#15171c] flex justify-end">
               {!checkResultData ? (
                 <button

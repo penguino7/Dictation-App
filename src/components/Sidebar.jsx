@@ -1,426 +1,185 @@
-import { useState, useRef, useEffect } from "react";
-import Parser from "srt-parser-2";
 import {
-  Play,
-  Pause,
-  RotateCcw,
-  Check,
-  ChevronRight,
-  RefreshCw,
-  Type,
-  Settings,
-  Flame,
+  X,
+  Trophy,
+  Plus,
+  Trash2,
+  Calendar,
+  LogOut,
+  User,
+  Clock,
+  Sun,
 } from "lucide-react";
-import {
-  timeToSeconds,
-  cleanWord,
-  isMorningBonusTime,
-  getStreakMultiplier,
-} from "../utils";
+import { auth } from "../firebase";
+import { signOut } from "firebase/auth";
 
-export default function Player({
-  day,
-  initialStreak,
-  onUpdateStats,
-  onUpdateProgress,
+export default function Sidebar({
+  user,
+  stats,
+  days,
+  selectedDay,
+  onSelectDay,
+  onDeleteDay,
+  onOpenCreate,
+  isOpen,
+  onClose,
 }) {
-  const [subtitles, setSubtitles] = useState([]);
-  const [currentLineIndex, setCurrentLineIndex] = useState(0);
-  const [userInput, setUserInput] = useState("");
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [playbackSpeed, setPlaybackSpeed] = useState(1);
-  const [checkResultData, setCheckResultData] = useState(null);
-
-  const [completedLines, setCompletedLines] = useState(day.progress || []);
-  const [xpNotification, setXpNotification] = useState(null);
-  const [streak, setStreak] = useState(initialStreak);
-
-  const audioRef = useRef(null);
-  const inputRef = useRef(null);
-  const scrollRef = useRef(null);
-  const isFirstLoad = useRef(true);
-  const parser = new Parser();
-
-  // --- TÍNH NĂNG MỚI: ĐẾM GIỜ HỌC ---
-  useEffect(() => {
-    // Cứ mỗi 60 giây (60000ms) thì gọi hàm cập nhật +1 phút
-    const timer = setInterval(() => {
-      onUpdateStats({ addMinutes: 1 }); // Chỉ gửi addMinutes, không gửi XP hay Streak
-    }, 60000);
-
-    return () => clearInterval(timer); // Xóa timer khi user thoát bài hoặc tắt web
-  }, []);
-  // ---------------------------------
-
-  useEffect(() => {
-    if (day) {
-      const srtData = parser.fromSrt(day.srtContent);
-      const processedSubs = srtData.map((item) => ({
-        ...item,
-        startTime: timeToSeconds(item.startTime),
-        endTime: timeToSeconds(item.endTime),
-      }));
-      setSubtitles(processedSubs);
-
-      const firstIncomplete = processedSubs.findIndex(
-        (_, idx) => !(day.progress || []).includes(idx),
-      );
-      setCurrentLineIndex(firstIncomplete !== -1 ? firstIncomplete : 0);
-
-      setUserInput("");
-      setCheckResultData(null);
-      setIsPlaying(false);
-      setCompletedLines(day.progress || []);
-      isFirstLoad.current = true;
-    }
-  }, [day]);
-
-  useEffect(() => {
-    setUserInput("");
-    setCheckResultData(null);
-    if (inputRef.current) inputRef.current.focus();
-
-    if (subtitles.length > 0 && audioRef.current) {
-      audioRef.current.currentTime = subtitles[currentLineIndex].startTime;
-      if (isFirstLoad.current) isFirstLoad.current = false;
-      else {
-        audioRef.current.play().catch(() => {});
-        setIsPlaying(true);
-      }
-
-      if (scrollRef.current) {
-        const activeItem = scrollRef.current.querySelector(
-          `[data-index='${currentLineIndex}']`,
-        );
-        if (activeItem)
-          activeItem.scrollIntoView({ behavior: "smooth", block: "center" });
-      }
-    }
-  }, [currentLineIndex, subtitles]);
-
-  const handleNext = () => {
-    setCheckResultData(null);
-    if (currentLineIndex < subtitles.length - 1)
-      setCurrentLineIndex((curr) => curr + 1);
-    else alert("Chúc mừng! Bạn đã hoàn thành bài học.");
+  const handleLogout = () => {
+    if (confirm("Bạn muốn đăng xuất?")) signOut(auth);
   };
 
-  const checkResult = () => {
-    if (!subtitles.length) return;
-    const correctText = subtitles[currentLineIndex].text;
-    const correctWords = correctText.trim().split(/\s+/);
-    const userWords = userInput.trim().split(/\s+/);
-
-    let correctCount = 0;
-    const result = correctWords.map((word, index) => {
-      const userWord = userWords[index] || "";
-      const isCorrect = cleanWord(word) === cleanWord(userWord);
-      if (isCorrect) correctCount++;
-      return { word, isCorrect, userTyped: userWord };
-    });
-
-    setCheckResultData(result);
-    const accuracy = (correctCount / correctWords.length) * 100;
-
-    if (!completedLines.includes(currentLineIndex)) {
-      if (accuracy >= 80) {
-        const newStreak = streak + 1;
-        const baseXP = 10;
-        const streakMultiplier = getStreakMultiplier(newStreak);
-        const isBonus = isMorningBonusTime();
-        let earnedXP = Math.round(
-          baseXP * streakMultiplier * (isBonus ? 2 : 1),
-        );
-
-        setStreak(newStreak);
-        const newCompletedLines = [...completedLines, currentLineIndex];
-        setCompletedLines(newCompletedLines);
-        setXpNotification({
-          amount: earnedXP,
-          isBonus,
-          streak: newStreak,
-          multiplier: streakMultiplier,
-        });
-
-        // Cập nhật XP, Streak (không cập nhật time ở đây)
-        onUpdateStats({ addXP: earnedXP, newStreak: newStreak });
-        onUpdateProgress(day.id, newCompletedLines);
-        setTimeout(() => setXpNotification(null), 2500);
-      } else {
-        if (streak > 0) {
-          setStreak(0);
-          onUpdateStats({ newStreak: 0 });
-        }
-      }
-    }
-  };
-
-  const handleKeyDown = (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      if (!checkResultData) checkResult();
-      else handleNext();
-    }
-  };
-
-  const togglePlay = () => {
-    if (isPlaying) audioRef.current.pause();
-    else {
-      const currentLine = subtitles[currentLineIndex];
-      if (audioRef.current.currentTime >= currentLine.endTime) {
-        audioRef.current.currentTime = currentLine.startTime;
-      }
-      audioRef.current.play();
-    }
-    setIsPlaying(!isPlaying);
-  };
-
-  const handleTimeUpdate = () => {
-    if (!subtitles.length) return;
-    const currentLine = subtitles[currentLineIndex];
-    if (audioRef.current.currentTime >= currentLine.endTime) {
-      audioRef.current.pause();
-      setIsPlaying(false);
-      audioRef.current.currentTime = currentLine.endTime;
-    }
+  // Format phút thành Giờ:Phút (ví dụ: 125p -> 2h 5m)
+  const formatTime = (minutes) => {
+    if (!minutes) return "0p";
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    if (h > 0) return `${h}h ${m}p`;
+    return `${m}p`;
   };
 
   return (
-    <div className="h-full flex flex-col p-3 lg:p-6 bg-[#0f1115] text-white relative overflow-hidden">
-      {xpNotification && (
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 animate-bounce-up pointer-events-none flex flex-col items-center">
-          <div
-            className={`text-6xl font-black drop-shadow-[0_0_15px_rgba(0,0,0,0.5)] ${xpNotification.isBonus ? "text-yellow-400" : "text-blue-500"}`}
-          >
-            +{xpNotification.amount} XP
-          </div>
-        </div>
+    <>
+      {isOpen && (
+        <div
+          className="fixed inset-0 bg-black/60 z-30 lg:hidden backdrop-blur-sm"
+          onClick={onClose}
+        ></div>
       )}
 
-      <div className="flex-none mb-4 lg:mb-6 flex items-end justify-between border-b border-gray-800 pb-3">
-        <div>
-          <p className="text-[10px] font-bold text-blue-400 uppercase tracking-widest mb-1">
-            Đang học bài
-          </p>
-          <h2 className="text-xl lg:text-3xl font-black text-gray-100 tracking-tight truncate max-w-[200px] lg:max-w-none">
-            {day.title}
-          </h2>
-        </div>
-
-        <div
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border font-bold transition-all ${
-            streak > 2
-              ? "bg-orange-500/10 border-orange-500/50 text-orange-500"
-              : "bg-gray-800 border-gray-700 text-gray-400"
-          }`}
-        >
-          <Flame
-            className={`w-4 h-4 ${streak > 2 ? "fill-orange-500 animate-pulse" : "text-gray-500"}`}
-          />
-          <span className="text-sm">{streak}</span>
-        </div>
-      </div>
-
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 min-h-0">
-        <div className="hidden lg:flex lg:col-span-4 flex-col bg-[#1a1d24] rounded-2xl border border-gray-800 overflow-hidden h-full shadow-lg">
-          <div className="flex-none p-4 bg-[#1e222b] border-b border-gray-800 flex justify-between items-center">
-            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
-              Tiến độ ({completedLines.length}/{subtitles.length})
-            </span>
-            <div className="h-1 flex-1 mx-3 bg-gray-700 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-blue-500 transition-all duration-500"
-                style={{
-                  width: `${(completedLines.length / subtitles.length) * 100}%`,
-                }}
-              ></div>
+      <div
+        className={`
+          fixed inset-y-0 left-0 z-40 w-72 bg-[#1a1d24] text-gray-300 flex flex-col border-r border-gray-800 shadow-2xl transition-transform duration-300 ease-in-out
+          ${isOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0 lg:static lg:shadow-none
+      `}
+      >
+        {/* 1. GÓC THÔNG TIN USER (Mới thêm) */}
+        <div className="p-6 bg-[#1e222b] border-b border-gray-800">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-black text-xl shadow-lg">
+              {user?.email?.charAt(0).toUpperCase() || "U"}
             </div>
+            <div className="overflow-hidden">
+              <h2 className="font-bold text-white truncate text-sm">
+                {user?.email?.split("@")[0]}
+              </h2>
+              <p className="text-[10px] text-gray-500 truncate">
+                {user?.email}
+              </p>
+            </div>
+            <button
+              onClick={onClose}
+              className="lg:hidden ml-auto text-gray-400 hover:text-white"
+            >
+              <X className="w-5 h-5" />
+            </button>
           </div>
 
-          <div
-            ref={scrollRef}
-            className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar"
-          >
-            {subtitles.map((sub, index) => (
-              <div
-                key={index}
-                data-index={index}
-                onClick={() => setCurrentLineIndex(index)}
-                className={`group p-3 rounded-xl cursor-pointer transition-all duration-200 border border-transparent flex justify-between items-center ${
-                  index === currentLineIndex
-                    ? "bg-blue-600/10 border-blue-500/50"
-                    : "hover:bg-gray-800 hover:border-gray-700"
-                }`}
-              >
-                <div className="flex items-center gap-3 overflow-hidden">
-                  <div
-                    className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                      index === currentLineIndex
-                        ? "bg-blue-500 text-white"
-                        : "bg-gray-700 text-gray-400"
-                    }`}
-                  >
-                    {index + 1}
-                  </div>
-                  <span
-                    className={`text-sm font-medium truncate w-32 ${index === currentLineIndex ? "text-blue-200" : "text-gray-400 group-hover:text-gray-200"}`}
-                  >
-                    Câu #{index + 1}
-                  </span>
-                </div>
-                {completedLines.includes(index) && (
-                  <Check className="w-4 h-4 text-green-500" />
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="lg:col-span-8 flex flex-col gap-3 lg:gap-4 h-full min-h-0">
-          <audio
-            ref={audioRef}
-            src={day.audioUrl}
-            onTimeUpdate={handleTimeUpdate}
-            playbackRate={playbackSpeed}
-          />
-
-          <div className="flex-none bg-[#1a1d24] rounded-2xl p-3 lg:p-4 border border-gray-800 flex justify-between items-center shadow-lg">
-            <div className="flex items-center gap-2">
-              <Settings className="w-4 h-4 text-gray-500 hidden sm:block" />
-              <select
-                className="bg-gray-800 text-gray-300 px-2 py-1.5 rounded text-xs font-bold outline-none border border-gray-700"
-                onChange={(e) => {
-                  setPlaybackSpeed(Number(e.target.value));
-                  if (audioRef.current)
-                    audioRef.current.playbackRate = Number(e.target.value);
-                }}
-              >
-                <option value="0.75">0.75x</option>
-                <option value="1" selected>
-                  1.0x
-                </option>
-                <option value="1.25">1.25x</option>
-              </select>
-            </div>
-
-            <div className="flex items-center gap-4 absolute left-1/2 -translate-x-1/2">
-              <button
-                onClick={() => {
-                  const currentLine = subtitles[currentLineIndex];
-                  audioRef.current.currentTime = currentLine.startTime;
-                  audioRef.current.play();
-                  setIsPlaying(true);
-                }}
-                className="text-gray-400 hover:text-white p-2"
-              >
-                <RotateCcw className="w-5 h-5" />
-              </button>
-
-              <button
-                onClick={togglePlay}
-                className="w-12 h-12 bg-blue-600 hover:bg-blue-500 text-white rounded-full flex items-center justify-center shadow-lg shadow-blue-900/40 active:scale-95 transition-all"
-              >
-                {isPlaying ? (
-                  <Pause className="w-6 h-6 fill-current" />
-                ) : (
-                  <Play className="w-6 h-6 fill-current ml-1" />
-                )}
-              </button>
-
-              <button
-                onClick={handleNext}
-                disabled={currentLineIndex === subtitles.length - 1}
-                className="text-gray-400 hover:text-white p-2 disabled:opacity-30"
-              >
-                <ChevronRight className="w-6 h-6" />
-              </button>
-            </div>
-
-            <div className="w-10 sm:w-20 text-right text-xs font-mono text-gray-500 hidden sm:block">
-              {subtitles[currentLineIndex] && (
-                <span>
-                  {Math.floor(
-                    subtitles[currentLineIndex].endTime -
-                      subtitles[currentLineIndex].startTime,
-                  )}
-                  s
-                </span>
-              )}
-            </div>
-          </div>
-
-          <div className="flex-1 bg-[#1a1d24] rounded-2xl border border-gray-800 overflow-hidden relative flex flex-col shadow-lg min-h-0">
-            <div className="flex-none px-4 py-3 border-b border-gray-800 flex items-center gap-2 bg-[#1e222b]">
-              <Type className="w-4 h-4 text-blue-500" />
-              <span className="text-[10px] font-bold text-gray-400 uppercase">
-                Gõ lại những gì bạn nghe thấy
+          {/* Thống kê thời gian */}
+          <div className="grid grid-cols-2 gap-2">
+            <div className="bg-[#15171c] p-2 rounded-lg border border-gray-700/50 flex flex-col items-center">
+              <span className="text-[10px] text-gray-500 font-bold uppercase flex items-center gap-1 mb-1">
+                <Clock className="w-3 h-3" /> Tổng cộng
+              </span>
+              <span className="text-sm font-black text-blue-400">
+                {formatTime(stats.totalMinutes)}
               </span>
             </div>
-
-            <textarea
-              ref={inputRef}
-              className={`w-full flex-1 p-4 lg:p-6 text-lg lg:text-2xl bg-transparent outline-none resize-none font-medium leading-relaxed
-                ${checkResultData ? "text-gray-500 cursor-not-allowed" : "text-gray-200 placeholder-gray-600"}`}
-              placeholder="Nghe và gõ lại..."
-              value={userInput}
-              onChange={(e) => setUserInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              disabled={!!checkResultData}
-              spellCheck="false"
-            ></textarea>
-
-            {checkResultData && (
-              <div className="absolute inset-0 bg-[#1a1d24]/95 backdrop-blur-sm z-10 flex flex-col animate-fade-in">
-                <div className="flex-none px-4 py-3 border-b border-gray-800 flex justify-between items-center bg-green-900/20">
-                  <h3 className="font-bold text-green-400 text-sm flex items-center gap-2">
-                    <Check className="w-4 h-4" /> Kết quả
-                  </h3>
-                  <button
-                    onClick={() => setCheckResultData(null)}
-                    className="text-xs font-bold text-gray-400 hover:text-white flex items-center gap-1 bg-gray-800 px-2 py-1 rounded"
-                  >
-                    <RefreshCw className="w-3 h-3" /> Làm lại
-                  </button>
-                </div>
-                <div className="flex-1 p-4 overflow-y-auto custom-scrollbar">
-                  <div className="flex flex-wrap gap-2 text-lg lg:text-xl leading-relaxed">
-                    {checkResultData.map((item, idx) => (
-                      <span
-                        key={idx}
-                        className={`px-1.5 py-0.5 rounded ${
-                          item.isCorrect
-                            ? "text-green-400 border-b border-green-500/30"
-                            : "text-red-400 border-b border-red-500/30 line-through decoration-red-500/50"
-                        }`}
-                      >
-                        {item.word}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div className="flex-none p-4 border-t border-gray-800 bg-[#15171c] flex justify-end">
-              {!checkResultData ? (
-                <button
-                  onClick={checkResult}
-                  className="w-full sm:w-auto px-6 py-3 bg-gray-100 hover:bg-white text-gray-900 rounded-xl font-bold text-sm shadow-lg shadow-white/10 active:scale-95 transition-all flex items-center justify-center gap-2"
-                >
-                  <Check className="w-4 h-4" /> Kiểm tra (Enter)
-                </button>
-              ) : (
-                <button
-                  onClick={handleNext}
-                  className="w-full sm:w-auto px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold text-sm shadow-lg shadow-blue-500/30 active:scale-95 transition-all flex items-center justify-center gap-2"
-                >
-                  Tiếp theo <ChevronRight className="w-4 h-4" />
-                </button>
-              )}
+            <div className="bg-[#15171c] p-2 rounded-lg border border-gray-700/50 flex flex-col items-center">
+              <span className="text-[10px] text-gray-500 font-bold uppercase flex items-center gap-1 mb-1">
+                <Sun className="w-3 h-3 text-yellow-500" /> Hôm nay
+              </span>
+              <span className="text-sm font-black text-yellow-400">
+                {formatTime(stats.todayMinutes)}
+              </span>
             </div>
           </div>
         </div>
+
+        {/* 2. RANK CARD */}
+        <div className="p-6 pb-2">
+          <div className="bg-gradient-to-br from-orange-600 to-red-600 rounded-2xl p-4 text-white shadow-lg relative overflow-hidden group">
+            <Trophy className="absolute -bottom-2 -right-2 w-20 h-20 text-white/10 rotate-12" />
+            <div className="relative z-10">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-[10px] font-bold bg-black/20 px-2 py-0.5 rounded text-orange-100">
+                  RANK
+                </span>
+                <span className="text-xs font-bold">{stats.xp} XP</span>
+              </div>
+              <h3 className="text-xl font-black mb-2">Đồng (Bronze)</h3>
+              <div className="h-1.5 bg-black/20 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-yellow-300 w-[10%]"
+                  style={{ width: `${Math.min((stats.xp / 500) * 100, 100)}%` }}
+                ></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="px-6 pb-4">
+          <button
+            onClick={() => {
+              onOpenCreate();
+              onClose();
+            }}
+            className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-900/20 active:scale-95 transition-all"
+          >
+            <Plus className="w-4 h-4" /> Thêm bài mới
+          </button>
+        </div>
+
+        {/* 3. DANH SÁCH BÀI HỌC */}
+        <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-1 custom-scrollbar">
+          <p className="text-[10px] font-bold text-gray-500 uppercase px-2 mb-2 tracking-wider">
+            Thư viện bài học
+          </p>
+          {days.length === 0 ? (
+            <div className="text-center text-gray-600 py-8 text-xs italic">
+              Trống trơn...
+            </div>
+          ) : (
+            days.map((day) => (
+              <div
+                key={day.id}
+                onClick={() => {
+                  onSelectDay(day);
+                  onClose();
+                }}
+                className={`group flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all border border-transparent ${
+                  selectedDay?.id === day.id
+                    ? "bg-blue-600/10 border-blue-500/50 text-blue-400"
+                    : "hover:bg-gray-800 hover:border-gray-700 hover:text-white"
+                }`}
+              >
+                <div className="overflow-hidden">
+                  <h4 className="font-bold truncate text-sm">{day.title}</h4>
+                  <div className="flex items-center gap-1 text-[10px] text-gray-500 mt-0.5">
+                    <Calendar className="w-3 h-3" />
+                    <span>
+                      {new Date(day.createdAt).toLocaleDateString("vi-VN")}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={(e) => onDeleteDay(e, day.id)}
+                  className="opacity-0 group-hover:opacity-100 p-1.5 text-gray-500 hover:text-red-500 transition-all"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="p-4 border-t border-gray-800">
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center gap-2 text-gray-500 hover:text-red-400 hover:bg-red-500/10 py-2 rounded-lg transition-all text-sm font-bold"
+          >
+            <LogOut className="w-4 h-4" /> Đăng xuất
+          </button>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
