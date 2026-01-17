@@ -90,3 +90,14 @@ export const getStreakMultiplier = (streak) => {
   if (streak <= 10) return 2; // Streak 6-10: x2
   return 3; // Streak 11+: x3
 };
+
+export const secondsToTime = (totalSeconds) => {
+  const pad = (num, size = 2) => num.toString().padStart(size, "0");
+
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = Math.floor(totalSeconds % 60);
+  const milliseconds = Math.round((totalSeconds % 1) * 1000);
+
+  return `${pad(hours)}:${pad(minutes)}:${pad(seconds)},${pad(milliseconds, 3)}`;
+};
