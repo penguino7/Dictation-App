@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
-import { BookOpen, LogOut } from "lucide-react";
+import { BookOpen, Menu } from "lucide-react"; // Thêm icon Menu
 import { auth } from "./firebase";
-import { onAuthStateChanged, signOut } from "firebase/auth";
+import { onAuthStateChanged } from "firebase/auth";
 import {
   addDay,
   getAllDays,
@@ -17,7 +17,7 @@ import Player from "./components/Player";
 import Auth from "./components/Auth";
 
 function App() {
-  const [user, setUser] = useState(null); // Lưu thông tin người dùng
+  const [user, setUser] = useState(null);
   const [loadingUser, setLoadingUser] = useState(true);
 
   const [days, setDays] = useState([]);
@@ -26,7 +26,9 @@ function App() {
   const [currentXP, setCurrentXP] = useState(0);
   const [streak, setStreak] = useState(0);
 
-  // 1. THEO DÕI TRẠNG THÁI ĐĂNG NHẬP
+  // State mới: Quản lý đóng mở Sidebar trên Mobile
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
@@ -35,12 +37,10 @@ function App() {
     return () => unsubscribe();
   }, []);
 
-  // 2. KHI CÓ USER -> TẢI DỮ LIỆU CỦA USER ĐÓ
   useEffect(() => {
     if (user) {
       loadData();
     } else {
-      // Reset dữ liệu khi đăng xuất
       setDays([]);
       setCurrentXP(0);
       setStreak(0);
@@ -50,10 +50,9 @@ function App() {
 
   const loadData = async () => {
     if (!user) return;
-    const lessonData = await getAllDays(user.uid); // Truyền ID user vào
+    const lessonData = await getAllDays(user.uid);
     setDays(lessonData);
-
-    const stats = await getUserStats(user.uid); // Truyền ID user vào
+    const stats = await getUserStats(user.uid);
     setCurrentXP(stats.xp || 0);
     setStreak(stats.streak || 0);
   };
@@ -96,20 +95,17 @@ function App() {
     }
   };
 
-  // NẾU ĐANG TẢI USER -> Màn hình đen chờ
   if (loadingUser)
     return (
       <div className="h-screen bg-[#0f1115] flex items-center justify-center text-white">
         Loading...
       </div>
     );
-
-  // NẾU CHƯA ĐĂNG NHẬP -> HIỆN BẢNG LOGIN
   if (!user) return <Auth />;
 
-  // ĐÃ ĐĂNG NHẬP -> HIỆN APP
   return (
-    <div className="flex h-screen bg-gray-100 font-sans text-gray-800 overflow-hidden">
+    <div className="flex h-screen bg-[#0f1115] font-sans text-gray-200 overflow-hidden">
+      {/* Sidebar truyền thêm props isOpen và onClose */}
       <Sidebar
         days={days}
         selectedDay={selectedDay}
@@ -117,17 +113,22 @@ function App() {
         onDeleteDay={handleDeleteDay}
         onOpenCreate={() => setIsCreating(true)}
         currentXP={currentXP}
+        isOpen={isSidebarOpen} // Truyền trạng thái mở
+        onClose={() => setIsSidebarOpen(false)} // Hàm đóng
       />
 
-      <div className="flex-1 flex flex-col relative bg-gray-50">
-        {/* Nút Đăng xuất ở góc trên phải */}
-        <div className="absolute top-4 right-4 z-50">
+      <div className="flex-1 flex flex-col relative bg-[#13161c]">
+        {/* HEADER MOBILE: Chỉ hiện trên màn hình nhỏ (lg:hidden) */}
+        <div className="lg:hidden flex items-center p-4 bg-[#1a1d24] border-b border-gray-800">
           <button
-            onClick={() => signOut(auth)}
-            className="bg-red-500/10 hover:bg-red-500/20 text-red-500 px-3 py-1 rounded text-xs font-bold flex items-center gap-1 transition-all"
+            onClick={() => setIsSidebarOpen(true)}
+            className="text-gray-300 hover:text-white mr-4"
           >
-            <LogOut className="w-3 h-3" /> Logout ({user.email})
+            <Menu className="w-6 h-6" />
           </button>
+          <h1 className="text-lg font-black text-white">
+            Dictation<span className="text-blue-500">Master</span>
+          </h1>
         </div>
 
         {selectedDay ? (
@@ -139,9 +140,11 @@ function App() {
             onUpdateProgress={handleUpdateProgress}
           />
         ) : (
-          <div className="h-full flex flex-col items-center justify-center text-gray-400">
-            <BookOpen className="w-20 h-20 mb-4 opacity-10" />
-            <p className="text-lg">Chào mừng, {user.email}!</p>
+          <div className="h-full flex flex-col items-center justify-center text-gray-500 p-4 text-center">
+            <BookOpen className="w-16 h-16 mb-4 opacity-20" />
+            <p className="text-lg font-medium">
+              Chọn bài học từ Menu để bắt đầu
+            </p>
           </div>
         )}
 
