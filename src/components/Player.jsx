@@ -448,8 +448,8 @@ export default function Player({
           </div>
         </div>
       </div>
-      <h1>AUTHOR FIXED</h1>
     </div>
   );
 }
-//test
+
+//jafhuhefuhiednjihriu
