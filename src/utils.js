@@ -101,3 +101,36 @@ export const secondsToTime = (totalSeconds) => {
 
   return `${pad(hours)}:${pad(minutes)}:${pad(seconds)},${pad(milliseconds, 3)}`;
 };
+
+// ... Giữ nguyên các hàm cũ (timeToSeconds, cleanWord, secondsToTime...)
+
+export const uploadToCloudinary = async (file) => {
+  const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
+  const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
+
+  if (!cloudName || !uploadPreset) {
+    alert("Chưa cấu hình Cloudinary trong .env!");
+    return null;
+  }
+
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("upload_preset", uploadPreset);
+  formData.append("resource_type", "auto"); // Tự động nhận diện mp3/video
+
+  try {
+    const res = await fetch(
+      `https://api.cloudinary.com/v1_1/${cloudName}/upload`,
+      {
+        method: "POST",
+        body: formData,
+      },
+    );
+    const data = await res.json();
+    return data.secure_url; // Trả về link file trên mạng
+  } catch (error) {
+    console.error("Upload lỗi:", error);
+    alert("Lỗi khi tải file lên Cloudinary!");
+    return null;
+  }
+};
