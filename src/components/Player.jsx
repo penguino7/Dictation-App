@@ -49,7 +49,7 @@ export default function Player({
     return () => clearInterval(timer);
   }, []);
 
-  // --- 2. KHỞI TẠO DỮ LIỆU (CHỈ CHẠY KHI ĐỔI BÀI KHÁC) ---
+  // --- 2. KHỞI TẠO DỮ LIỆU ---
   useEffect(() => {
     if (day) {
       const srtData = parser.fromSrt(day.srtContent);
@@ -60,13 +60,11 @@ export default function Player({
       }));
       setSubtitles(processedSubs);
 
-      // Tìm câu chưa học đầu tiên
       const firstIncomplete = processedSubs.findIndex(
         (_, idx) => !(day.progress || []).includes(idx),
       );
       setCurrentLineIndex(firstIncomplete !== -1 ? firstIncomplete : 0);
 
-      // Reset trạng thái
       setUserInput("");
       setCheckResultData(null);
       setIsPlaying(false);
@@ -74,7 +72,7 @@ export default function Player({
       isFirstLoad.current = true;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [day.id]); // <--- QUAN TRỌNG: Chỉ reset khi ID bài thay đổi
+  }, [day.id]);
 
   // --- 3. ĐỒNG BỘ AUDIO VÀ SCROLL ---
   useEffect(() => {
@@ -125,19 +123,16 @@ export default function Player({
     if (inputRef.current) inputRef.current.focus();
   };
 
-  // --- 5. HÀM CHẤM ĐIỂM THÔNG MINH (FIX LỖI LỆCH DÒNG) ---
+  // --- 5. CHECK RESULT & NEXT ---
   const checkResult = () => {
     if (!subtitles.length) return;
     const correctText = subtitles[currentLineIndex].text;
 
-    // Tách từ gốc
     const correctWords = correctText
       .trim()
       .split(/\s+/)
       .filter((w) => w.length > 0);
 
-    // Xử lý Input user: Biến dấu câu ngắt nghỉ thành khoảng trắng -> Tách -> Lọc rác
-    // Giữ lại dấu nháy đơn (') cho các từ như I've, Don't
     const userWordsRaw = userInput
       .replace(/[.,!?;:"()“”—\-]/g, " ")
       .trim()
@@ -147,22 +142,17 @@ export default function Player({
     let correctCount = 0;
     const result = correctWords.map((word, index) => {
       const userWord = userWordsRaw[index] || "";
-      // So sánh dễ tính (bỏ qua hoa thường)
       const isCorrect = cleanWord(word) === cleanWord(userWord);
-
       if (isCorrect) correctCount++;
       return { word, isCorrect, userTyped: userWord };
     });
 
     setCheckResultData(result);
 
-    // Tính điểm
     const accuracy = (correctCount / correctWords.length) * 100;
 
-    // Nếu chưa hoàn thành câu này thì xét điểm
     if (!completedLines.includes(currentLineIndex)) {
       if (accuracy >= 80) {
-        // TRÊN 80% LÀ QUA MÔN
         const newStreak = streak + 1;
         const baseXP = 10;
         const streakMultiplier = getStreakMultiplier(newStreak);
@@ -173,7 +163,7 @@ export default function Player({
 
         setStreak(newStreak);
         const newCompletedLines = [...completedLines, currentLineIndex];
-        setCompletedLines(newCompletedLines); // Cập nhật state ngay lập tức
+        setCompletedLines(newCompletedLines);
         setXpNotification({
           amount: earnedXP,
           isBonus,
@@ -185,7 +175,6 @@ export default function Player({
         onUpdateProgress(day.id, newCompletedLines);
         setTimeout(() => setXpNotification(null), 2500);
       } else {
-        // SAI: Reset streak
         if (streak > 0) {
           setStreak(0);
           onUpdateStats({ newStreak: 0 });
@@ -201,26 +190,18 @@ export default function Player({
     else alert("Chúc mừng! Bạn đã hoàn thành bài học.");
   };
 
-  // --- 6. XỬ LÝ ENTER (LOGIC MỚI) ---
+  // --- 6. XỬ LÝ PHÍM ENTER ---
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-
-      // Trường hợp 1: Chưa bấm kiểm tra -> Gọi hàm Check
       if (!checkResultData) {
         checkResult();
         return;
       }
-
-      // Trường hợp 2: Đã hiện kết quả -> Kiểm tra xem ĐÚNG hay SAI
-      // Lưu ý: Phải check dựa trên danh sách completedLines
       const isPassed = completedLines.includes(currentLineIndex);
-
       if (isPassed) {
-        // Nếu ĐÚNG -> Enter để qua câu tiếp
         handleNext();
       } else {
-        // Nếu SAI -> Enter để làm lại
         setCheckResultData(null);
         setTimeout(() => {
           if (inputRef.current) inputRef.current.focus();
@@ -243,7 +224,7 @@ export default function Player({
     };
     window.addEventListener("keydown", handleShortcut);
     return () => window.removeEventListener("keydown", handleShortcut);
-  }, [isPlaying, subtitles, currentLineIndex]); // Re-bind khi state thay đổi
+  }, [isPlaying, subtitles, currentLineIndex]);
 
   const handleTimeUpdate = () => {
     if (!subtitles.length) return;
@@ -287,6 +268,7 @@ export default function Player({
       </div>
 
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 min-h-0">
+        {/* SIDEBAR LIST CÂU */}
         <div className="hidden lg:flex lg:col-span-4 flex-col bg-[#1a1d24] rounded-2xl border border-gray-800 overflow-hidden h-full shadow-lg">
           <div className="flex-none p-4 bg-[#1e222b] border-b border-gray-800 flex justify-between items-center">
             <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
@@ -332,6 +314,7 @@ export default function Player({
           </div>
         </div>
 
+        {/* MAIN PLAYER AREA */}
         <div className="lg:col-span-8 flex flex-col gap-3 lg:gap-4 h-full min-h-0">
           <audio
             ref={audioRef}
@@ -340,6 +323,7 @@ export default function Player({
             playbackRate={playbackSpeed}
           />
 
+          {/* CONTROLS */}
           <div className="flex-none bg-[#1a1d24] rounded-2xl p-3 lg:p-4 border border-gray-800 flex justify-between items-center shadow-lg">
             <div className="flex items-center gap-2">
               <Settings className="w-4 h-4 text-gray-500 hidden sm:block" />
@@ -398,6 +382,7 @@ export default function Player({
             </div>
           </div>
 
+          {/* INPUT & RESULT AREA */}
           <div className="flex-1 bg-[#1a1d24] rounded-2xl border border-gray-800 overflow-hidden relative flex flex-col shadow-lg min-h-0">
             <div className="flex-none px-4 py-3 border-b border-gray-800 flex items-center gap-2 bg-[#1e222b]">
               <Type className="w-4 h-4 text-blue-500" />
@@ -417,69 +402,76 @@ export default function Player({
               spellCheck="false"
             ></textarea>
 
+            {/* OVERLAY KẾT QUẢ (HIỆN LÊN KHI CÓ CHECKRESULTDATA) */}
             {checkResultData && (
-              <div className="absolute inset-0 bg-[#1a1d24]/95 backdrop-blur-sm z-10 flex flex-col animate-fade-in">
-                <div className="flex-none px-4 py-3 border-b border-gray-800 flex justify-between items-center bg-green-900/20">
-                  <h3 className="font-bold text-green-400 text-sm flex items-center gap-2">
-                    <Check className="w-4 h-4" /> Kết quả
+              <div className="absolute inset-0 bg-[#1a1d24] z-20 flex flex-col animate-fade-in">
+                {/* Header Kết Quả */}
+                <div className="flex-none px-6 py-4 border-b border-gray-800 flex justify-between items-center bg-[#1e222b]">
+                  <h3 className="font-bold text-green-400 text-lg flex items-center gap-2">
+                    <Check className="w-5 h-5" /> Kết quả
                   </h3>
                   <button
-                    onClick={() => setCheckResultData(null)}
-                    className="text-xs font-bold text-gray-400 hover:text-white flex items-center gap-1 bg-gray-800 px-2 py-1 rounded"
+                    onClick={() => {
+                      setCheckResultData(null);
+                      setTimeout(() => inputRef.current?.focus(), 0);
+                    }}
+                    className="text-gray-500 hover:text-white transition-colors"
                   >
-                    <RefreshCw className="w-3 h-3" /> Làm lại
+                    <RefreshCw className="w-4 h-4" />
                   </button>
                 </div>
-                <div className="flex-1 p-4 overflow-y-auto custom-scrollbar">
-                  <div className="flex flex-wrap gap-2 text-lg lg:text-xl leading-relaxed">
+
+                {/* Nội dung text kết quả */}
+                <div className="flex-1 p-6 overflow-y-auto custom-scrollbar bg-[#13161c]">
+                  <div className="flex flex-wrap gap-2 text-xl lg:text-2xl leading-relaxed font-medium">
                     {checkResultData.map((item, idx) => (
                       <span
                         key={idx}
-                        className={`px-1.5 py-0.5 rounded ${item.isCorrect ? "text-green-400 border-b border-green-500/30" : "text-red-400 border-b border-red-500/30 line-through decoration-red-500/50"}`}
+                        className={`px-2 py-1 rounded-lg transition-all ${
+                          item.isCorrect
+                            ? "text-green-400 bg-green-500/10 border border-green-500/20"
+                            : "text-red-400 bg-red-500/10 border border-red-500/20 line-through decoration-red-500/50"
+                        }`}
                       >
                         {item.word}
                       </span>
                     ))}
                   </div>
                 </div>
-              </div>
-            )}
 
-            <div className="flex-none p-4 border-t border-gray-800 bg-[#15171c]">
-              {!checkResultData ? (
-                /* TRẠNG THÁI 1: ĐANG GÕ -> HIỆN NÚT CHECK */
-                <div className="flex justify-end">
-                  <button
-                    onClick={checkResult}
-                    className="w-full sm:w-auto px-6 py-3 bg-gray-100 hover:bg-white text-gray-900 rounded-xl font-bold text-sm shadow-lg shadow-white/10 active:scale-95 transition-all flex items-center justify-center gap-2"
-                  >
-                    <Check className="w-4 h-4" /> Kiểm tra (Enter)
-                  </button>
-                </div>
-              ) : (
-                /* TRẠNG THÁI 2: ĐÃ CÓ KẾT QUẢ -> HIỆN 2 NÚT (LÀM LẠI & TIẾP THEO) */
-                <div className="flex items-center justify-between gap-3 animate-fade-in">
-                  {/* Nút Làm lại */}
+                {/* Footer của Overlay (Chứa 2 nút: Làm lại & Tiếp theo) */}
+                <div className="flex-none p-5 border-t border-gray-800 bg-[#1a1d24] flex items-center gap-4">
                   <button
                     onClick={() => {
                       setCheckResultData(null);
                       setTimeout(() => inputRef.current?.focus(), 0);
                     }}
-                    className="flex-1 sm:flex-none px-6 py-3 bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2"
+                    className="flex-1 py-3.5 bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 border border-gray-700"
                   >
-                    <RefreshCw className="w-4 h-4" /> Làm lại
+                    <RefreshCw className="w-4 h-4" /> Làm lại (Enter)
                   </button>
 
-                  {/* Nút Tiếp theo */}
                   <button
                     onClick={handleNext}
-                    className="flex-1 sm:flex-none px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold text-sm shadow-lg shadow-blue-500/30 active:scale-95 transition-all flex items-center justify-center gap-2"
+                    className="flex-1 py-3.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold text-sm shadow-lg shadow-blue-900/30 active:scale-95 transition-all flex items-center justify-center gap-2"
                   >
-                    Tiếp theo <ChevronRight className="w-4 h-4" />
+                    Tiếp theo (Enter) <ChevronRight className="w-4 h-4" />
                   </button>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
+
+            {/* FOOTER CHÍNH (Chỉ hiện nút Kiểm Tra khi chưa có kết quả) */}
+            {!checkResultData && (
+              <div className="flex-none p-4 border-t border-gray-800 bg-[#15171c] flex justify-end">
+                <button
+                  onClick={checkResult}
+                  className="w-full sm:w-auto px-8 py-3 bg-gray-100 hover:bg-white text-gray-900 rounded-xl font-bold text-sm shadow-lg shadow-white/10 active:scale-95 transition-all flex items-center justify-center gap-2"
+                >
+                  <Check className="w-4 h-4" /> Kiểm tra (Enter)
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
