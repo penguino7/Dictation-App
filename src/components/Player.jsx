@@ -166,37 +166,35 @@ export default function Player({
     if (!subtitles.length) return;
     const correctText = subtitles[currentLineIndex].text;
 
-    // 1. Tách từ trong Script (Giữ nguyên để hiển thị đúng format gốc)
+    // 1. Script gốc (Tách theo khoảng trắng)
     const correctWords = correctText.trim().split(/\s+/);
 
-    // 2. Xử lý Input của User thông minh hơn:
-    // - Bước A: Thay thế toàn bộ dấu câu bằng khoảng trắng (để tránh dính từ)
-    // - Bước B: Cắt chuỗi thành mảng
-    // - Bước C: Lọc bỏ các ô rỗng (do dấu câu để lại)
+    // 2. Input của User (Xử lý thông minh hơn)
     const userWordsRaw = userInput
-      .replace(/[.,!?;:"()“”‘’'—\-]/g, " ")
+      // Bước A: Chỉ thay thế các dấu câu "Ngắt nghỉ" thành khoảng trắng (Giữ lại dấu ' của từ I've)
+      .replace(/[.,!?;:"()“”—\-]/g, " ")
+      // Bước B: Cắt chuỗi
       .trim()
       .split(/\s+/)
-      .filter((w) => w.trim().length > 0); // <-- QUAN TRỌNG: Lọc sạch rác
+      // Bước C: Lọc sạch rác
+      .filter((w) => w.trim().length > 0);
 
     let correctCount = 0;
 
     const result = correctWords.map((word, index) => {
-      // Lấy từ tương ứng của user (đã được lọc sạch dấu câu)
+      // Lấy từ tương ứng của user
       const userWord = userWordsRaw[index] || "";
 
-      // So sánh (Dùng cleanWord để bỏ qua viết hoa/thường)
+      // So sánh (Dùng cleanWord để bỏ qua viết hoa/thường và dấu câu còn sót)
       const isCorrect = cleanWord(word) === cleanWord(userWord);
 
       if (isCorrect) correctCount++;
-
-      // userTyped: Hiển thị lại cái từ user đã gõ (đã làm sạch)
       return { word, isCorrect, userTyped: userWord };
     });
 
     setCheckResultData(result);
 
-    // --- PHẦN TÍNH ĐIỂM (GIỮ NGUYÊN) ---
+    // --- Tính điểm (Giữ nguyên) ---
     const accuracy = (correctCount / correctWords.length) * 100;
 
     if (!completedLines.includes(currentLineIndex)) {
