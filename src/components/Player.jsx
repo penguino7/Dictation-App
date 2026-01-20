@@ -52,8 +52,10 @@ export default function Player({
   }, []);
   // ---------------------------------
 
+  // 1. INIT DATA (SỬA LẠI: Chỉ chạy khi đổi bài khác - check theo day.id)
   useEffect(() => {
     if (day) {
+      const parser = new Parser(); // Khai báo lại parser ở đây cho chắc hoặc dùng ref
       const srtData = parser.fromSrt(day.srtContent);
       const processedSubs = srtData.map((item) => ({
         ...item,
@@ -62,6 +64,7 @@ export default function Player({
       }));
       setSubtitles(processedSubs);
 
+      // Chỉ tự nhảy đến câu chưa học KHI MỚI VÀO BÀI
       const firstIncomplete = processedSubs.findIndex(
         (_, idx) => !(day.progress || []).includes(idx),
       );
@@ -73,7 +76,7 @@ export default function Player({
       setCompletedLines(day.progress || []);
       isFirstLoad.current = true;
     }
-  }, [day]);
+  }, [day.id]); // <--- QUAN TRỌNG: Chỉ reset khi ID bài học thay đổi
 
   // Logic đồng bộ Audio và Scroll
   useEffect(() => {
@@ -163,25 +166,37 @@ export default function Player({
     if (!subtitles.length) return;
     const correctText = subtitles[currentLineIndex].text;
 
-    // Tách câu thành mảng các từ dựa trên khoảng trắng
+    // 1. Tách từ trong Script (Giữ nguyên để hiển thị đúng format gốc)
     const correctWords = correctText.trim().split(/\s+/);
-    const userWords = userInput.trim().split(/\s+/);
+
+    // 2. Xử lý Input của User thông minh hơn:
+    // - Bước A: Thay thế toàn bộ dấu câu bằng khoảng trắng (để tránh dính từ)
+    // - Bước B: Cắt chuỗi thành mảng
+    // - Bước C: Lọc bỏ các ô rỗng (do dấu câu để lại)
+    const userWordsRaw = userInput
+      .replace(/[.,!?;:"()“”‘’'—\-]/g, " ")
+      .trim()
+      .split(/\s+/)
+      .filter((w) => w.trim().length > 0); // <-- QUAN TRỌNG: Lọc sạch rác
 
     let correctCount = 0;
 
     const result = correctWords.map((word, index) => {
-      const userWord = userWords[index] || "";
+      // Lấy từ tương ứng của user (đã được lọc sạch dấu câu)
+      const userWord = userWordsRaw[index] || "";
 
-      // SO SÁNH DỄ TÍNH
+      // So sánh (Dùng cleanWord để bỏ qua viết hoa/thường)
       const isCorrect = cleanWord(word) === cleanWord(userWord);
 
       if (isCorrect) correctCount++;
+
+      // userTyped: Hiển thị lại cái từ user đã gõ (đã làm sạch)
       return { word, isCorrect, userTyped: userWord };
     });
 
     setCheckResultData(result);
 
-    // Tính điểm & Logic Streak
+    // --- PHẦN TÍNH ĐIỂM (GIỮ NGUYÊN) ---
     const accuracy = (correctCount / correctWords.length) * 100;
 
     if (!completedLines.includes(currentLineIndex)) {
@@ -217,10 +232,32 @@ export default function Player({
   };
 
   const handleKeyDown = (e) => {
+    // Chỉ xử lý khi nhấn Enter (và không giữ Shift)
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      if (!checkResultData) checkResult();
-      else handleNext();
+
+      // TRƯỜNG HỢP 1: CHƯA KIỂM TRA -> GỌI HÀM CHECK
+      if (!checkResultData) {
+        checkResult();
+        return;
+      }
+
+      // TRƯỜNG HỢP 2: ĐANG HIỆN KẾT QUẢ (CHECK RỒI)
+      // Kiểm tra xem câu này đã ĐÚNG (qua môn) chưa?
+      const isPassed = completedLines.includes(currentLineIndex);
+
+      if (isPassed) {
+        // NẾU ĐÚNG: Bấm Enter để qua câu tiếp theo
+        handleNext();
+      } else {
+        // NẾU SAI: Bấm Enter để tắt bảng kết quả và sửa lại (Retry)
+        setCheckResultData(null);
+
+        // Đưa con trỏ chuột quay lại ô nhập liệu ngay lập tức
+        setTimeout(() => {
+          if (inputRef.current) inputRef.current.focus();
+        }, 0);
+      }
     }
   };
 
