@@ -11,7 +11,15 @@ export const timeToSeconds = (timeString) => {
 };
 
 export const cleanWord = (word) => {
-  return word.replace(/[.,!?;:"()]/g, "").toLowerCase();
+  if (!word) return "";
+
+  return (
+    word
+      .toLowerCase() // 1. Chuyển hết thành chữ thường (Hello -> hello)
+      // 2. Xóa sạch các dấu câu phổ biến (chấm, phẩy, hỏi, than, ngoặc, gạch ngang...)
+      .replace(/[.,!?;:"()“”‘’'—\-]/g, "")
+      .trim()
+  ); // 3. Cắt khoảng trắng thừa
 };
 
 export const isMorningBonusTime = () => {

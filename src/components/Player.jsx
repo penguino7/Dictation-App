@@ -45,10 +45,10 @@ export default function Player({
   useEffect(() => {
     // Cứ mỗi 60 giây (60000ms) thì gọi hàm cập nhật +1 phút
     const timer = setInterval(() => {
-      onUpdateStats({ addMinutes: 1 }); // Chỉ gửi addMinutes, không gửi XP hay Streak
+      onUpdateStats({ addMinutes: 1 });
     }, 60000);
 
-    return () => clearInterval(timer); // Xóa timer khi user thoát bài hoặc tắt web
+    return () => clearInterval(timer);
   }, []);
   // ---------------------------------
 
@@ -75,6 +75,7 @@ export default function Player({
     }
   }, [day]);
 
+  // Logic đồng bộ Audio và Scroll
   useEffect(() => {
     setUserInput("");
     setCheckResultData(null);
@@ -98,6 +99,59 @@ export default function Player({
     }
   }, [currentLineIndex, subtitles]);
 
+  // --- 1. CÁC HÀM XỬ LÝ AUDIO (Dùng chung cho Nút bấm & Phím tắt) ---
+
+  const handleTogglePlay = () => {
+    if (!audioRef.current) return;
+
+    if (isPlaying) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+    } else {
+      const currentLine = subtitles[currentLineIndex];
+      // Nếu audio đã chạy lố qua thời gian câu hiện tại thì tua lại đầu câu
+      if (currentLine && audioRef.current.currentTime >= currentLine.endTime) {
+        audioRef.current.currentTime = currentLine.startTime;
+      }
+      audioRef.current.play().catch(() => {});
+      setIsPlaying(true);
+    }
+  };
+
+  const handleReplayCurrentLine = () => {
+    if (!audioRef.current || !subtitles[currentLineIndex]) return;
+
+    const currentLine = subtitles[currentLineIndex];
+    audioRef.current.currentTime = currentLine.startTime;
+    audioRef.current.play().catch(() => {});
+    setIsPlaying(true);
+
+    // Focus lại vào ô nhập liệu để gõ luôn cho tiện
+    if (inputRef.current) inputRef.current.focus();
+  };
+
+  // --- 2. LẮNG NGHE SỰ KIỆN BÀN PHÍM ---
+  useEffect(() => {
+    const handleShortcut = (e) => {
+      // Phím CTRL -> Bật/Tắt nhạc
+      if (e.key === "Control") {
+        e.preventDefault(); // Chặn hành vi mặc định (nếu có)
+        handleTogglePlay();
+      }
+
+      // Phím ALT -> Nghe lại câu (Replay)
+      if (e.key === "Alt") {
+        e.preventDefault(); // Chặn việc focus lên menu trình duyệt
+        handleReplayCurrentLine();
+      }
+    };
+
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+  }, [isPlaying, subtitles, currentLineIndex]); // Cập nhật listener khi state thay đổi
+
+  // ----------------------------------------
+
   const handleNext = () => {
     setCheckResultData(null);
     if (currentLineIndex < subtitles.length - 1)
@@ -108,18 +162,26 @@ export default function Player({
   const checkResult = () => {
     if (!subtitles.length) return;
     const correctText = subtitles[currentLineIndex].text;
+
+    // Tách câu thành mảng các từ dựa trên khoảng trắng
     const correctWords = correctText.trim().split(/\s+/);
     const userWords = userInput.trim().split(/\s+/);
 
     let correctCount = 0;
+
     const result = correctWords.map((word, index) => {
       const userWord = userWords[index] || "";
+
+      // SO SÁNH DỄ TÍNH
       const isCorrect = cleanWord(word) === cleanWord(userWord);
+
       if (isCorrect) correctCount++;
       return { word, isCorrect, userTyped: userWord };
     });
 
     setCheckResultData(result);
+
+    // Tính điểm & Logic Streak
     const accuracy = (correctCount / correctWords.length) * 100;
 
     if (!completedLines.includes(currentLineIndex)) {
@@ -142,7 +204,6 @@ export default function Player({
           multiplier: streakMultiplier,
         });
 
-        // Cập nhật XP, Streak (không cập nhật time ở đây)
         onUpdateStats({ addXP: earnedXP, newStreak: newStreak });
         onUpdateProgress(day.id, newCompletedLines);
         setTimeout(() => setXpNotification(null), 2500);
@@ -163,18 +224,6 @@ export default function Player({
     }
   };
 
-  const togglePlay = () => {
-    if (isPlaying) audioRef.current.pause();
-    else {
-      const currentLine = subtitles[currentLineIndex];
-      if (audioRef.current.currentTime >= currentLine.endTime) {
-        audioRef.current.currentTime = currentLine.startTime;
-      }
-      audioRef.current.play();
-    }
-    setIsPlaying(!isPlaying);
-  };
-
   const handleTimeUpdate = () => {
     if (!subtitles.length) return;
     const currentLine = subtitles[currentLineIndex];
@@ -190,7 +239,9 @@ export default function Player({
       {xpNotification && (
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 animate-bounce-up pointer-events-none flex flex-col items-center">
           <div
-            className={`text-6xl font-black drop-shadow-[0_0_15px_rgba(0,0,0,0.5)] ${xpNotification.isBonus ? "text-yellow-400" : "text-blue-500"}`}
+            className={`text-6xl font-black drop-shadow-[0_0_15px_rgba(0,0,0,0.5)] ${
+              xpNotification.isBonus ? "text-yellow-400" : "text-blue-500"
+            }`}
           >
             +{xpNotification.amount} XP
           </div>
@@ -215,7 +266,9 @@ export default function Player({
           }`}
         >
           <Flame
-            className={`w-4 h-4 ${streak > 2 ? "fill-orange-500 animate-pulse" : "text-gray-500"}`}
+            className={`w-4 h-4 ${
+              streak > 2 ? "fill-orange-500 animate-pulse" : "text-gray-500"
+            }`}
           />
           <span className="text-sm">{streak}</span>
         </div>
@@ -263,7 +316,11 @@ export default function Player({
                     {index + 1}
                   </div>
                   <span
-                    className={`text-sm font-medium truncate w-32 ${index === currentLineIndex ? "text-blue-200" : "text-gray-400 group-hover:text-gray-200"}`}
+                    className={`text-sm font-medium truncate w-32 ${
+                      index === currentLineIndex
+                        ? "text-blue-200"
+                        : "text-gray-400 group-hover:text-gray-200"
+                    }`}
                   >
                     Câu #{index + 1}
                   </span>
@@ -304,21 +361,20 @@ export default function Player({
             </div>
 
             <div className="flex items-center gap-4 absolute left-1/2 -translate-x-1/2">
+              {/* NÚT REPLAY DÙNG HÀM MỚI */}
               <button
-                onClick={() => {
-                  const currentLine = subtitles[currentLineIndex];
-                  audioRef.current.currentTime = currentLine.startTime;
-                  audioRef.current.play();
-                  setIsPlaying(true);
-                }}
+                onClick={handleReplayCurrentLine}
                 className="text-gray-400 hover:text-white p-2"
+                title="Nghe lại (Alt)"
               >
                 <RotateCcw className="w-5 h-5" />
               </button>
 
+              {/* NÚT PLAY/PAUSE DÙNG HÀM MỚI */}
               <button
-                onClick={togglePlay}
+                onClick={handleTogglePlay}
                 className="w-12 h-12 bg-blue-600 hover:bg-blue-500 text-white rounded-full flex items-center justify-center shadow-lg shadow-blue-900/40 active:scale-95 transition-all"
+                title="Play/Pause (Ctrl)"
               >
                 {isPlaying ? (
                   <Pause className="w-6 h-6 fill-current" />
@@ -360,7 +416,11 @@ export default function Player({
             <textarea
               ref={inputRef}
               className={`w-full flex-1 p-4 lg:p-6 text-lg lg:text-2xl bg-transparent outline-none resize-none font-medium leading-relaxed
-                ${checkResultData ? "text-gray-500 cursor-not-allowed" : "text-gray-200 placeholder-gray-600"}`}
+                ${
+                  checkResultData
+                    ? "text-gray-500 cursor-not-allowed"
+                    : "text-gray-200 placeholder-gray-600"
+                }`}
               placeholder="Nghe và gõ lại..."
               value={userInput}
               onChange={(e) => setUserInput(e.target.value)}
