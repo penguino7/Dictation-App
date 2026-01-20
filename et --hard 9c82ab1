@@ -1,0 +1,28 @@
+[33m70a10e4[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m  fix import
+[33mee3bf75[m  update UI + fix timestamp mp3
+[33m8eb3a18[m  update UI
+[33m3895426[m  update UI
+[33mf16d9ce[m  update UI
+[33m445e991[m  update toggle button
+[33m83ea70f[m fix the next button
+[33mf63e200[m add next button
+[33m6984246[m update and fix enter toggle
+[33m9b6bd7f[m update and fix check script
+[33m602fa2d[m update and fix
+[33me565dc2[m update ctrl , alt
+[33md97054d[m fix upload type to cloudbinary
+[33ma20ed4d[m udate fix audio
+[33m897a51f[m blink
+[33m8e8e884[m add func split audio final p2
+[33m0d755f1[m add func split audio final
+[33ma7258d1[m add func split audio
+[33m35c95a5[m change code
+[33m2732090[m fix
+[33mdaef97d[m add infor user func
+[33m07964b1[m rewrite responsive for phone
+[33m9bc9c42[m add responsive ui
+[33mceb45c7[m add auth func
+[33m993f779[m last
+[33m24ba41b[m fix git author
+[33m038c3e1[m test auto deploy
+[33m992e0ed[m init vite react project

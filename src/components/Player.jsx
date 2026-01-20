@@ -13,13 +13,14 @@ import {
   Flame,
   Music,
   Headphones,
+  Sliders,
 } from "lucide-react";
 import {
   timeToSeconds,
   cleanWord,
   isMorningBonusTime,
   getStreakMultiplier,
-  getFixedAudioUrl, // <--- 1. ĐÃ THÊM IMPORT MỚI
+  getFixedAudioUrl,
 } from "../utils";
 
 export default function Player({
@@ -35,6 +36,10 @@ export default function Player({
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [checkResultData, setCheckResultData] = useState(null);
 
+  // --- STATE MỚI CHO LOGIC SYNC ---
+  const [isAudioReady, setIsAudioReady] = useState(false); // FIX 1: Chờ audio load
+  const [audioOffset, setAudioOffset] = useState(0.15); // FIX 2: Offset mặc định 0.15s
+
   const [completedLines, setCompletedLines] = useState(day?.progress || []);
   const [xpNotification, setXpNotification] = useState(null);
   const [streak, setStreak] = useState(initialStreak);
@@ -43,9 +48,10 @@ export default function Player({
   const inputRef = useRef(null);
   const scrollRef = useRef(null);
   const isFirstLoad = useRef(true);
+  const loopRef = useRef(null); // FIX 3: Dùng để chứa requestAnimationFrame
   const parser = new Parser();
 
-  // --- 1. LOGIC GIỮ NGUYÊN ---
+  // --- 1. ĐẾM GIỜ HỌC ---
   useEffect(() => {
     const timer = setInterval(() => {
       onUpdateStats({ addMinutes: 1 });
@@ -53,8 +59,10 @@ export default function Player({
     return () => clearInterval(timer);
   }, []);
 
+  // --- 2. KHỞI TẠO DỮ LIỆU ---
   useEffect(() => {
     if (day) {
+      setIsAudioReady(false); // Reset trạng thái load khi đổi bài
       const srtData = parser.fromSrt(day.srtContent);
       const processedSubs = srtData.map((item) => ({
         ...item,
@@ -62,29 +70,43 @@ export default function Player({
         endTime: timeToSeconds(item.endTime),
       }));
       setSubtitles(processedSubs);
+
       const firstIncomplete = processedSubs.findIndex(
         (_, idx) => !(day.progress || []).includes(idx),
       );
       setCurrentLineIndex(firstIncomplete !== -1 ? firstIncomplete : 0);
+
       setUserInput("");
       setCheckResultData(null);
       setIsPlaying(false);
       setCompletedLines(day.progress || []);
       isFirstLoad.current = true;
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [day.id]);
 
+  // --- 3. ĐỒNG BỘ AUDIO VÀ SCROLL ---
   useEffect(() => {
     setUserInput("");
     setCheckResultData(null);
     if (inputRef.current) inputRef.current.focus();
-    if (subtitles.length > 0 && audioRef.current) {
-      audioRef.current.currentTime = subtitles[currentLineIndex].startTime;
-      if (isFirstLoad.current) isFirstLoad.current = false;
-      else {
-        audioRef.current.play().catch(() => {});
-        setIsPlaying(true);
+
+    // Chỉ thao tác khi Audio đã sẵn sàng
+    if (subtitles.length > 0 && audioRef.current && isAudioReady) {
+      // Áp dụng Offset ngay khi seek
+      const targetTime = Math.max(
+        0,
+        subtitles[currentLineIndex].startTime + audioOffset,
+      );
+
+      audioRef.current.currentTime = targetTime;
+
+      if (isFirstLoad.current) {
+        isFirstLoad.current = false;
+      } else {
+        playAudioSegment(); // Dùng hàm play xịn xò mới
       }
+
       if (scrollRef.current) {
         const activeItem = scrollRef.current.querySelector(
           `[data-index='${currentLineIndex}']`,
@@ -93,32 +115,83 @@ export default function Player({
           activeItem.scrollIntoView({ behavior: "smooth", block: "center" });
       }
     }
-  }, [currentLineIndex, subtitles]);
+  }, [currentLineIndex, subtitles, isAudioReady]); // Bỏ audioOffset ra khỏi đây để tránh jump lung tung khi kéo slider
+
+  // --- 4. HÀM XỬ LÝ AUDIO MỚI (FIX 3: PRECISION TIMER) ---
+
+  // Hàm này thay thế audio.play() thường
+  const playAudioSegment = () => {
+    if (!audioRef.current || !subtitles[currentLineIndex]) return;
+
+    // Hủy các loop cũ nếu có
+    if (loopRef.current) cancelAnimationFrame(loopRef.current);
+
+    audioRef.current
+      .play()
+      .then(() => {
+        setIsPlaying(true);
+        // Bắt đầu vòng lặp kiểm tra thời gian siêu tốc (60fps)
+        checkAudioTime();
+      })
+      .catch((err) => console.log("Audio play error:", err));
+  };
+
+  // Vòng lặp kiểm tra thời gian (Thay thế cho onTimeUpdate để dừng chính xác)
+  const checkAudioTime = () => {
+    if (!audioRef.current || !subtitles[currentLineIndex]) return;
+
+    const currentLine = subtitles[currentLineIndex];
+    // Tính thời gian dừng có cộng thêm Offset
+    const stopTime = currentLine.endTime + audioOffset;
+
+    if (audioRef.current.currentTime >= stopTime) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+      audioRef.current.currentTime = currentLine.startTime + audioOffset; // Reset về đầu câu chuẩn bị cho lần nghe sau
+      if (loopRef.current) cancelAnimationFrame(loopRef.current);
+    } else {
+      // Nếu chưa đến giờ dừng, tiếp tục kiểm tra ở frame tiếp theo
+      loopRef.current = requestAnimationFrame(checkAudioTime);
+    }
+  };
+
+  // Dọn dẹp khi component unmount
+  useEffect(() => {
+    return () => {
+      if (loopRef.current) cancelAnimationFrame(loopRef.current);
+    };
+  }, []);
 
   const handleTogglePlay = () => {
     if (!audioRef.current) return;
     if (isPlaying) {
       audioRef.current.pause();
       setIsPlaying(false);
+      if (loopRef.current) cancelAnimationFrame(loopRef.current);
     } else {
-      const currentLine = subtitles[currentLineIndex];
-      if (currentLine && audioRef.current.currentTime >= currentLine.endTime) {
-        audioRef.current.currentTime = currentLine.startTime;
-      }
-      audioRef.current.play().catch(() => {});
-      setIsPlaying(true);
+      playAudioSegment();
     }
   };
 
   const handleReplayCurrentLine = () => {
     if (!audioRef.current || !subtitles[currentLineIndex]) return;
     const currentLine = subtitles[currentLineIndex];
-    audioRef.current.currentTime = currentLine.startTime;
-    audioRef.current.play().catch(() => {});
-    setIsPlaying(true);
+    // Seek có offset
+    audioRef.current.currentTime = Math.max(
+      0,
+      currentLine.startTime + audioOffset,
+    );
+    playAudioSegment();
     if (inputRef.current) inputRef.current.focus();
   };
 
+  // --- FIX 1: EVENT LISTENER CHO AUDIO ---
+  const handleAudioLoaded = () => {
+    console.log("Audio loaded & ready!");
+    setIsAudioReady(true);
+  };
+
+  // --- NAVIGATE ---
   const handleNext = () => {
     setCheckResultData(null);
     if (currentLineIndex < subtitles.length - 1)
@@ -136,13 +209,16 @@ export default function Player({
     setTimeout(() => inputRef.current?.focus(), 0);
   };
 
+  // --- CHECK RESULT ---
   const checkResult = () => {
     if (!subtitles.length) return;
     const correctText = subtitles[currentLineIndex].text;
+
     const correctWords = correctText
       .trim()
       .split(/\s+/)
       .filter((w) => w.length > 0);
+
     const userWordsRaw = userInput
       .replace(/[.,!?;:"()“”—\-]/g, " ")
       .trim()
@@ -158,6 +234,7 @@ export default function Player({
     });
 
     setCheckResultData(result);
+
     const accuracy = (correctCount / correctWords.length) * 100;
 
     if (!completedLines.includes(currentLineIndex)) {
@@ -169,6 +246,7 @@ export default function Player({
         let earnedXP = Math.round(
           baseXP * streakMultiplier * (isBonus ? 2 : 1),
         );
+
         setStreak(newStreak);
         const newCompletedLines = [...completedLines, currentLineIndex];
         setCompletedLines(newCompletedLines);
@@ -178,6 +256,7 @@ export default function Player({
           streak: newStreak,
           multiplier: streakMultiplier,
         });
+
         onUpdateStats({ addXP: earnedXP, newStreak: newStreak });
         onUpdateProgress(day.id, newCompletedLines);
         setTimeout(() => setXpNotification(null), 2500);
@@ -226,21 +305,20 @@ export default function Player({
     };
     window.addEventListener("keydown", handleShortcut);
     return () => window.removeEventListener("keydown", handleShortcut);
-  }, [isPlaying, subtitles, currentLineIndex, checkResultData]);
+  }, [isPlaying, subtitles, currentLineIndex, checkResultData, audioOffset]);
 
-  const handleTimeUpdate = () => {
-    if (!subtitles.length) return;
-    const currentLine = subtitles[currentLineIndex];
-    if (audioRef.current.currentTime >= currentLine.endTime) {
-      audioRef.current.pause();
-      setIsPlaying(false);
-      audioRef.current.currentTime = currentLine.endTime;
-    }
-  };
-
-  // --- GIAO DIỆN ---
   return (
     <div className="h-full flex flex-col p-4 lg:p-6 bg-gradient-to-br from-[#0f1115] via-[#13161c] to-[#0f1115] text-white relative overflow-hidden font-sans">
+      {/* LOADING OVERLAY (FIX 1) */}
+      {!isAudioReady && (
+        <div className="absolute inset-0 z-50 bg-[#0f1115] flex flex-col items-center justify-center animate-fade-in">
+          <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
+          <p className="text-blue-400 font-bold animate-pulse">
+            Đang tải Audio...
+          </p>
+        </div>
+      )}
+
       {/* BACKGROUND EFFECTS */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-600/10 rounded-full blur-[100px]"></div>
@@ -278,7 +356,6 @@ export default function Player({
             </h2>
           </div>
         </div>
-
         <div
           className={`flex items-center gap-2 px-4 py-2 rounded-2xl border backdrop-blur-md transition-all duration-300 ${streak > 2 ? "bg-orange-500/10 border-orange-500/30 text-orange-400 shadow-[0_0_15px_rgba(249,115,22,0.2)]" : "bg-gray-800/50 border-gray-700/50 text-gray-400"}`}
         >
@@ -289,7 +366,7 @@ export default function Player({
         </div>
       </div>
 
-      {/* MAIN CONTENT GRID */}
+      {/* MAIN CONTENT */}
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-0 relative z-10">
         {/* SIDEBAR */}
         <div className="hidden lg:flex lg:col-span-4 flex-col bg-[#1a1d24]/60 backdrop-blur-xl rounded-3xl border border-white/5 overflow-hidden h-full shadow-2xl">
@@ -301,7 +378,6 @@ export default function Player({
               {Math.round((completedLines.length / subtitles.length) * 100)}%
             </div>
           </div>
-
           <div
             ref={scrollRef}
             className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar"
@@ -353,87 +429,110 @@ export default function Player({
 
         {/* PLAYER AREA */}
         <div className="lg:col-span-8 flex flex-col gap-4 h-full min-h-0">
-          {/* 👇 2. ĐÃ SỬA: BỌC HÀM getFixedAudioUrl VÀO ĐÂY */}
+          {/* AUDIO TAG VỚI CÁC EVENT LISTENER */}
           <audio
             ref={audioRef}
             src={getFixedAudioUrl(day.audioUrl)}
-            onTimeUpdate={handleTimeUpdate}
+            onCanPlayThrough={handleAudioLoaded} // Kích hoạt Audio Ready
+            onLoadedMetadata={() => console.log("Metadata loaded")}
             playbackRate={playbackSpeed}
           />
 
           {/* CONTROL BAR */}
-          <div className="flex-none bg-[#1a1d24]/80 backdrop-blur-xl rounded-3xl p-4 border border-white/5 flex justify-between items-center shadow-lg relative group">
-            {/* Speed Control */}
-            <div className="flex items-center gap-2 bg-black/20 p-1.5 rounded-xl border border-white/5">
-              <Settings className="w-4 h-4 text-gray-500 ml-1" />
-              <select
-                className="bg-transparent text-gray-300 text-xs font-bold outline-none cursor-pointer"
-                onChange={(e) => {
-                  setPlaybackSpeed(Number(e.target.value));
-                  if (audioRef.current)
-                    audioRef.current.playbackRate = Number(e.target.value);
-                }}
-              >
-                <option value="0.75">0.75x</option>
-                <option value="1" selected>
-                  1.0x
-                </option>
-                <option value="1.25">1.25x</option>
-              </select>
-            </div>
+          <div className="flex-none bg-[#1a1d24]/80 backdrop-blur-xl rounded-3xl p-4 border border-white/5 flex flex-col gap-4 shadow-lg relative group">
+            {/* Row 1: Controls chính */}
+            <div className="flex justify-between items-center w-full relative">
+              {/* Speed Control */}
+              <div className="flex items-center gap-2 bg-black/20 p-1.5 rounded-xl border border-white/5 z-20">
+                <Settings className="w-4 h-4 text-gray-500 ml-1" />
+                <select
+                  className="bg-transparent text-gray-300 text-xs font-bold outline-none cursor-pointer"
+                  onChange={(e) => {
+                    setPlaybackSpeed(Number(e.target.value));
+                    if (audioRef.current)
+                      audioRef.current.playbackRate = Number(e.target.value);
+                  }}
+                >
+                  <option value="0.75">0.75x</option>
+                  <option value="1" selected>
+                    1.0x
+                  </option>
+                  <option value="1.25">1.25x</option>
+                </select>
+              </div>
 
-            {/* Center Buttons */}
-            <div className="flex items-center gap-6 absolute left-1/2 -translate-x-1/2">
-              <button
-                onClick={handlePrevious}
-                disabled={currentLineIndex === 0}
-                className="text-gray-500 hover:text-white transition-colors disabled:opacity-30 hover:bg-white/10 p-2 rounded-full"
-                title="Câu trước (A)"
-              >
-                <ChevronLeft className="w-6 h-6" />
-              </button>
-
-              <button
-                onClick={handleReplayCurrentLine}
-                className="text-gray-400 hover:text-blue-400 transition-colors bg-white/5 hover:bg-white/10 p-3 rounded-full border border-white/5"
-                title="Nghe lại (Alt)"
-              >
-                <RotateCcw className="w-5 h-5" />
-              </button>
-
-              <button
-                onClick={handleTogglePlay}
-                className="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-700 hover:from-blue-400 hover:to-blue-600 text-white rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(37,99,235,0.4)] active:scale-95 transition-all duration-200 border-4 border-[#1a1d24]"
-                title="Play/Pause (Ctrl)"
-              >
-                {isPlaying ? (
-                  <Pause className="w-7 h-7 fill-current" />
-                ) : (
-                  <Play className="w-7 h-7 fill-current ml-1" />
-                )}
-              </button>
-
-              <button
-                onClick={handleNext}
-                disabled={currentLineIndex === subtitles.length - 1}
-                className="text-gray-500 hover:text-white transition-colors disabled:opacity-30 hover:bg-white/10 p-2 rounded-full"
-                title="Câu sau (D)"
-              >
-                <ChevronRight className="w-6 h-6" />
-              </button>
-            </div>
-
-            {/* Time Display */}
-            <div className="w-20 text-right text-xs font-mono text-gray-500 bg-black/20 px-3 py-1.5 rounded-lg border border-white/5">
-              {subtitles[currentLineIndex] && (
-                <span>
-                  {Math.floor(
-                    subtitles[currentLineIndex].endTime -
-                      subtitles[currentLineIndex].startTime,
+              {/* Center Buttons */}
+              <div className="flex items-center gap-6 absolute left-1/2 -translate-x-1/2 z-20">
+                <button
+                  onClick={handlePrevious}
+                  disabled={currentLineIndex === 0}
+                  className="text-gray-500 hover:text-white transition-colors disabled:opacity-30 hover:bg-white/10 p-2 rounded-full"
+                  title="Câu trước (A)"
+                >
+                  <ChevronLeft className="w-6 h-6" />
+                </button>
+                <button
+                  onClick={handleReplayCurrentLine}
+                  className="text-gray-400 hover:text-blue-400 transition-colors bg-white/5 hover:bg-white/10 p-3 rounded-full border border-white/5"
+                  title="Nghe lại (Alt)"
+                >
+                  <RotateCcw className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={handleTogglePlay}
+                  disabled={!isAudioReady}
+                  className="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-700 hover:from-blue-400 hover:to-blue-600 text-white rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(37,99,235,0.4)] active:scale-95 transition-all duration-200 border-4 border-[#1a1d24] disabled:opacity-50 disabled:grayscale"
+                  title="Play/Pause (Ctrl)"
+                >
+                  {isPlaying ? (
+                    <Pause className="w-7 h-7 fill-current" />
+                  ) : (
+                    <Play className="w-7 h-7 fill-current ml-1" />
                   )}
-                  s
-                </span>
-              )}
+                </button>
+                <button
+                  onClick={handleNext}
+                  disabled={currentLineIndex === subtitles.length - 1}
+                  className="text-gray-500 hover:text-white transition-colors disabled:opacity-30 hover:bg-white/10 p-2 rounded-full"
+                  title="Câu sau (D)"
+                >
+                  <ChevronRight className="w-6 h-6" />
+                </button>
+              </div>
+
+              {/* Time Display */}
+              <div className="w-20 text-right text-xs font-mono text-gray-500 bg-black/20 px-3 py-1.5 rounded-lg border border-white/5 z-20">
+                {subtitles[currentLineIndex] && (
+                  <span>
+                    {Math.floor(
+                      subtitles[currentLineIndex].endTime -
+                        subtitles[currentLineIndex].startTime,
+                    )}
+                    s
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Row 2: OFFSET SLIDER (FIX 2) */}
+            <div className="w-full flex items-center gap-3 px-2 pt-2 border-t border-white/5">
+              <Sliders className="w-3 h-3 text-gray-500" />
+              <span className="text-[10px] font-bold text-gray-500 uppercase">
+                Sync Offset:
+              </span>
+              <input
+                type="range"
+                min="-0.5"
+                max="0.5"
+                step="0.05"
+                value={audioOffset}
+                onChange={(e) => setAudioOffset(parseFloat(e.target.value))}
+                className="flex-1 h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
+              />
+              <span className="text-[10px] font-mono font-bold text-blue-400 w-10 text-right">
+                {audioOffset > 0 ? "+" : ""}
+                {audioOffset}s
+              </span>
             </div>
           </div>
 
@@ -510,7 +609,6 @@ export default function Player({
                         <ChevronLeft className="w-4 h-4" /> Câu trước
                       </div>
                     </button>
-
                     <button
                       onClick={handleRetry}
                       className="group flex flex-col items-center justify-center p-4 rounded-2xl bg-gray-800/50 hover:bg-gray-700/80 border border-white/5 transition-all hover:-translate-y-1"
@@ -522,7 +620,6 @@ export default function Player({
                         <RefreshCw className="w-4 h-4" /> Làm lại
                       </div>
                     </button>
-
                     <button
                       onClick={handleNext}
                       className="group flex flex-col items-center justify-center p-4 rounded-2xl bg-blue-600/20 hover:bg-blue-600 hover:text-white border border-blue-500/30 transition-all hover:-translate-y-1 text-blue-400"
