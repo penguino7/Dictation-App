@@ -81,3 +81,13 @@ export const uploadToCloudinary = async (file) => {
     return null;
   }
 };
+export const getFixedAudioUrl = (url) => {
+  if (!url) return "";
+  // Kiểm tra xem có phải link Cloudinary không
+  if (url.includes("cloudinary.com") && url.includes("/upload/")) {
+    // Chèn tham số "br_192" (Bitrate 192k cố định) vào sau chữ "upload/"
+    // Điều này ép Cloudinary trả về file chuẩn CBR, giúp tua chính xác tuyệt đối.
+    return url.replace("/upload/", "/upload/br_192/");
+  }
+  return url;
+};

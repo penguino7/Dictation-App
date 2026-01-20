@@ -19,6 +19,7 @@ import {
   cleanWord,
   isMorningBonusTime,
   getStreakMultiplier,
+  getFixedAudioUrl, // <--- 1. ĐÃ THÊM IMPORT MỚI
 } from "../utils";
 
 export default function Player({
@@ -44,7 +45,7 @@ export default function Player({
   const isFirstLoad = useRef(true);
   const parser = new Parser();
 
-  // --- 1. LOGIC GIỮ NGUYÊN (Không thay đổi) ---
+  // --- 1. LOGIC GIỮ NGUYÊN ---
   useEffect(() => {
     const timer = setInterval(() => {
       onUpdateStats({ addMinutes: 1 });
@@ -237,7 +238,7 @@ export default function Player({
     }
   };
 
-  // --- GIAO DIỆN MỚI BẮT ĐẦU TỪ ĐÂY ---
+  // --- GIAO DIỆN ---
   return (
     <div className="h-full flex flex-col p-4 lg:p-6 bg-gradient-to-br from-[#0f1115] via-[#13161c] to-[#0f1115] text-white relative overflow-hidden font-sans">
       {/* BACKGROUND EFFECTS */}
@@ -246,7 +247,7 @@ export default function Player({
         <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-600/10 rounded-full blur-[100px]"></div>
       </div>
 
-      {/* XP NOTIFICATION (POPUP) */}
+      {/* XP NOTIFICATION */}
       {xpNotification && (
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 animate-bounce-up pointer-events-none flex flex-col items-center">
           <div
@@ -290,7 +291,7 @@ export default function Player({
 
       {/* MAIN CONTENT GRID */}
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-0 relative z-10">
-        {/* SIDEBAR: DANH SÁCH CÂU (GLASS EFFECT) */}
+        {/* SIDEBAR */}
         <div className="hidden lg:flex lg:col-span-4 flex-col bg-[#1a1d24]/60 backdrop-blur-xl rounded-3xl border border-white/5 overflow-hidden h-full shadow-2xl">
           <div className="flex-none p-5 border-b border-white/5 bg-white/5 flex justify-between items-center">
             <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
@@ -352,14 +353,15 @@ export default function Player({
 
         {/* PLAYER AREA */}
         <div className="lg:col-span-8 flex flex-col gap-4 h-full min-h-0">
+          {/* 👇 2. ĐÃ SỬA: BỌC HÀM getFixedAudioUrl VÀO ĐÂY */}
           <audio
             ref={audioRef}
-            src={day.audioUrl}
+            src={getFixedAudioUrl(day.audioUrl)}
             onTimeUpdate={handleTimeUpdate}
             playbackRate={playbackSpeed}
           />
 
-          {/* CONTROL BAR (GLASS EFFECT) */}
+          {/* CONTROL BAR */}
           <div className="flex-none bg-[#1a1d24]/80 backdrop-blur-xl rounded-3xl p-4 border border-white/5 flex justify-between items-center shadow-lg relative group">
             {/* Speed Control */}
             <div className="flex items-center gap-2 bg-black/20 p-1.5 rounded-xl border border-white/5">
@@ -435,7 +437,7 @@ export default function Player({
             </div>
           </div>
 
-          {/* INPUT AREA (GLASS EFFECT) */}
+          {/* INPUT AREA */}
           <div className="flex-1 bg-[#1a1d24]/60 backdrop-blur-xl rounded-3xl border border-white/5 overflow-hidden relative flex flex-col shadow-2xl min-h-0 transition-all focus-within:border-blue-500/30 focus-within:bg-[#1a1d24]/80">
             <div className="flex-none px-6 py-4 border-b border-white/5 flex items-center gap-2 bg-white/5">
               <Type className="w-4 h-4 text-blue-400" />
@@ -456,7 +458,7 @@ export default function Player({
               spellCheck="false"
             ></textarea>
 
-            {/* OVERLAY RESULT (MODAL STYLE) */}
+            {/* OVERLAY RESULT */}
             {checkResultData && (
               <div className="absolute inset-0 bg-[#0f1115]/95 backdrop-blur-xl z-20 flex flex-col animate-fade-in">
                 {/* Header */}
@@ -486,7 +488,7 @@ export default function Player({
                             ? "text-green-400 bg-green-500/5 border border-green-500/20 shadow-[0_0_10px_rgba(74,222,128,0.1)]"
                             : "text-red-400 bg-red-500/5 border border-red-500/20 line-through decoration-red-500/50"
                         }`}
-                        style={{ animationDelay: `${idx * 0.05}s` }} // Hiệu ứng hiện từng chữ
+                        style={{ animationDelay: `${idx * 0.05}s` }}
                       >
                         {item.word}
                       </span>
@@ -537,7 +539,7 @@ export default function Player({
               </div>
             )}
 
-            {/* CHECK BUTTON (Chỉ hiện khi chưa có kết quả) */}
+            {/* CHECK BUTTON */}
             {!checkResultData && (
               <div className="flex-none p-4 border-t border-white/5 bg-white/5 flex justify-end">
                 <button
