@@ -445,21 +445,39 @@ export default function Player({
               </div>
             )}
 
-            <div className="flex-none p-4 border-t border-gray-800 bg-[#15171c] flex justify-end">
+            <div className="flex-none p-4 border-t border-gray-800 bg-[#15171c]">
               {!checkResultData ? (
-                <button
-                  onClick={checkResult}
-                  className="w-full sm:w-auto px-6 py-3 bg-gray-100 hover:bg-white text-gray-900 rounded-xl font-bold text-sm shadow-lg shadow-white/10 active:scale-95 transition-all flex items-center justify-center gap-2"
-                >
-                  <Check className="w-4 h-4" /> Kiểm tra (Enter)
-                </button>
+                /* TRẠNG THÁI 1: ĐANG GÕ -> HIỆN NÚT CHECK */
+                <div className="flex justify-end">
+                  <button
+                    onClick={checkResult}
+                    className="w-full sm:w-auto px-6 py-3 bg-gray-100 hover:bg-white text-gray-900 rounded-xl font-bold text-sm shadow-lg shadow-white/10 active:scale-95 transition-all flex items-center justify-center gap-2"
+                  >
+                    <Check className="w-4 h-4" /> Kiểm tra (Enter)
+                  </button>
+                </div>
               ) : (
-                <button
-                  onClick={handleNext}
-                  className="w-full sm:w-auto px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold text-sm shadow-lg shadow-blue-500/30 active:scale-95 transition-all flex items-center justify-center gap-2"
-                >
-                  Tiếp theo <ChevronRight className="w-4 h-4" />
-                </button>
+                /* TRẠNG THÁI 2: ĐÃ CÓ KẾT QUẢ -> HIỆN 2 NÚT (LÀM LẠI & TIẾP THEO) */
+                <div className="flex items-center justify-between gap-3 animate-fade-in">
+                  {/* Nút Làm lại */}
+                  <button
+                    onClick={() => {
+                      setCheckResultData(null);
+                      setTimeout(() => inputRef.current?.focus(), 0);
+                    }}
+                    className="flex-1 sm:flex-none px-6 py-3 bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2"
+                  >
+                    <RefreshCw className="w-4 h-4" /> Làm lại
+                  </button>
+
+                  {/* Nút Tiếp theo */}
+                  <button
+                    onClick={handleNext}
+                    className="flex-1 sm:flex-none px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold text-sm shadow-lg shadow-blue-500/30 active:scale-95 transition-all flex items-center justify-center gap-2"
+                  >
+                    Tiếp theo <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
               )}
             </div>
           </div>
